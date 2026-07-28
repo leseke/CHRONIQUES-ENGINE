@@ -1,16 +1,10 @@
 namespace Chroniques.Simulation.Kernel.EventBus;
 
 /// <summary>
-/// Bus de communication entre les systèmes.
+/// Traite un type précis d'événement.
 /// </summary>
-public interface IEventBus
+public interface IEventHandler<in TEvent>
+    where TEvent : IEvent
 {
-    void Publish<TEvent>(TEvent evt)
-        where TEvent : IEvent;
-
-    void Subscribe<TEvent>(IEventHandler<TEvent> handler)
-        where TEvent : IEvent;
-
-    void Unsubscribe<TEvent>(IEventHandler<TEvent> handler)
-        where TEvent : IEvent;
+    void Handle(TEvent evt);
 }
