@@ -1,12 +1,14 @@
+using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
-using Chroniques.Simulation.Kernel.Persistence;
+using Chroniques.Simulation.Persistence;
 using Xunit;
 
 namespace Chroniques.Simulation.Tests;
 
 /// <summary>
 /// Vérifie le critère de sortie v0.1 de MASTER-005 : « un World vide se
-/// sauvegarde et se recharge à l'identique. »
+/// sauvegarde et se recharge à l'identique », étendu en v0.2 aux Components
+/// métier (NeedsComponent).
 /// </summary>
 public class WorldSerializationTests
 {
@@ -44,5 +46,36 @@ public class WorldSerializationTests
         var evenementRecharge = Assert.Single(recharge.Events);
         Assert.Equal("vie.naissance", evenementRecharge.Kind);
         Assert.Equal(premiere.Id, evenementRecharge.Source);
+    }
+
+    [Fact]
+    public void Le_needs_component_dune_entity_survit_au_rechargement()
+    {
+        var original = new World(seed: 42);
+        var habitant = original.Spawn();
+        habitant.Set(new NeedsComponent { Faim = 63, Fatigue = 40, Sante = 90, Moral = 55 });
+
+        var json = WorldRepository.Save(original);
+        var recharge = WorldRepository.Load(json);
+
+        Assert.True(recharge.TryGetEntity(habitant.Id, out var habitantRecharge));
+        Assert.True(habitantRecharge.TryGet<NeedsComponent>(out var needsRecharge));
+        Assert.Equal(63, needsRecharge.Faim);
+        Assert.Equal(40, needsRecharge.Fatigue);
+        Assert.Equal(90, needsRecharge.Sante);
+        Assert.Equal(55, needsRecharge.Moral);
+    }
+
+    [Fact]
+    public void Une_entity_sans_needs_component_recharge_sans_en_avoir_un()
+    {
+        var original = new World(seed: 5);
+        original.Spawn();
+
+        var json = WorldRepository.Save(original);
+        var recharge = WorldRepository.Load(json);
+
+        var entity = Assert.Single(recharge.Entities);
+        Assert.False(entity.Has<NeedsComponent>());
     }
 }

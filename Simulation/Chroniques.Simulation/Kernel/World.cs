@@ -6,7 +6,7 @@ namespace Chroniques.Simulation.Kernel;
 ///
 /// Critère de sortie v0.1 (MASTER-005) : « le noyau tourne, tous les tests
 /// de lois passent, un World vide se sauvegarde et se recharge à
-/// l'identique. » Voir <see cref="Persistence.WorldRepository"/> pour la
+/// l'identique. » Voir <see cref="Chroniques.Simulation.Persistence.WorldRepository"/> pour la
 /// sauvegarde/rechargement.
 /// </summary>
 public sealed class World
@@ -32,7 +32,7 @@ public sealed class World
 
     /// <summary>
     /// Reconstruit un World à un Tick donné --- utilisé exclusivement par
-    /// <see cref="Persistence.WorldRepository"/> lors du rechargement.
+    /// <see cref="Chroniques.Simulation.Persistence.WorldRepository"/> lors du rechargement.
     /// </summary>
     internal static World Restore(long seed, Tick currentTick) => new(seed, currentTick);
 

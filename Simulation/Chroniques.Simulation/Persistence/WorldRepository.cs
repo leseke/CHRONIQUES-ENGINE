@@ -1,15 +1,15 @@
-using System.Text.Json;
+namespace Chroniques.Simulation.Persistence;
 
-namespace Chroniques.Simulation.Kernel.Persistence;
+using System.Text.Json;
+using Chroniques.Simulation.Kernel;
 
 /// <summary>
 /// Sauvegarde et recharge un <see cref="World"/> en JSON.
 ///
-/// Format de sauvegarde retenu pour v0.1 : JSON, conformément à
-/// PROD/FeuilleDeRoute.md (« Sérialisation JSON »). Un format binaire plus
-/// compact pourra être introduit plus tard sans changer cette interface ---
-/// ce serait alors une décision à tracer par un ADR, pas un changement
-/// silencieux.
+/// Format retenu pour v0.1/v0.2 : JSON, conformément à
+/// PROD/FeuilleDeRoute.md. Un format binaire plus compact pourra être
+/// introduit plus tard sans changer cette interface --- ce serait alors une
+/// décision à tracer par un ADR, pas un changement silencieux.
 /// </summary>
 public static class WorldRepository
 {
@@ -20,10 +20,18 @@ public static class WorldRepository
 
     public static string Save(World world)
     {
+        var entities = world.Entities
+            .Select(entity =>
+            {
+                entity.TryGet<Components.NeedsComponent>(out var needs);
+                return new EntitySnapshot(entity.Id.Value, needs);
+            })
+            .ToList();
+
         var snapshot = new WorldSnapshot(
             world.Seed,
             world.CurrentTick.Value,
-            world.Entities.Select(e => e.Id.Value).ToList(),
+            entities,
             world.Events.ToList());
 
         return JsonSerializer.Serialize(snapshot, Options);
@@ -36,13 +44,20 @@ public static class WorldRepository
 
         var world = World.Restore(snapshot.Seed, new Tick(snapshot.CurrentTick));
 
-        foreach (var entityId in snapshot.EntityIds)
+        foreach (var entitySnapshot in snapshot.Entities)
         {
             // Entity.Restore est internal : accessible ici car WorldRepository
             // vit dans le même assembly que Entity, précisément pour que ce
             // mécanisme de reconstruction reste réservé à la persistance et
             // ne devienne jamais une API publique de création d'Entity.
-            world.Reintroduce(Entity.Restore(new EntityId(entityId)));
+            var entity = Entity.Restore(new EntityId(entitySnapshot.Id));
+
+            if (entitySnapshot.Needs is not null)
+            {
+                entity.Set(entitySnapshot.Needs);
+            }
+
+            world.Reintroduce(entity);
         }
 
         world.ReplayEvents(snapshot.Events);

@@ -45,10 +45,14 @@ MASTER-005 l'exigera, jamais par anticipation (MASTER-006).
 
 ---
 
-## État actuel --- v0.1, Le noyau
+## État actuel --- v0.2, Un être vivant (en cours)
 
-Critère de sortie (MASTER-005) : *« le noyau tourne, tous les tests de lois
-passent, un World vide se sauvegarde et se recharge à l'identique. »*
+Critère de sortie v0.1 (atteint) : *« le noyau tourne, tous les tests de
+lois passent, un World vide se sauvegarde et se recharge à l'identique. »*
+
+Critère de sortie v0.2 (MASTER-005) : *« un personnage naît, vit ses
+besoins année après année, et meurt. Tout est observable sans aucun
+rendu. »*
 
 Implémenté :
 
@@ -56,17 +60,25 @@ Implémenté :
   `Entity`, `IComponent`, `Value<T>`, `State`, `Relation`, `GameEvent`,
   `Tick` (Time), `SpaceRef` (Space), `Lifecycle` ;
 - un `World` déterministe (`DeterministicRandom` à graine) ;
-- la sauvegarde/rechargement JSON (`Kernel/Persistence/WorldRepository.cs`) ;
-- un test par invariant du Kernel (`Tests/Chroniques.Simulation.Tests/`).
+- `Components/NeedsComponent.cs` --- premier Component métier (GDB-004B) :
+  faim, fatigue, santé, moral ;
+- `Systems/` --- `ISystem`, `Scheduler` (Tick + invocation ordonnée des
+  Systems), `NeedsDecaySystem` (déclin des besoins par Tick) ;
+- `Persistence/` --- sauvegarde/rechargement JSON, désormais capable de
+  sérialiser `NeedsComponent` (approche explicite, pas encore générique ---
+  voir le commentaire XML de `WorldSnapshot.cs`) ;
+- un test par invariant du Kernel et par règle de `NeedsDecaySystem`/`Scheduler`
+  (`Tests/Chroniques.Simulation.Tests/`).
 
-Pas encore implémenté, volontairement --- appartient à v0.2 et au-delà
-(MASTER-005) :
+Pas encore implémenté, volontairement --- appartient à la suite de v0.2 et
+à v0.3 (MASTER-005) :
 
-- aucun Component métier concret (besoins, santé, compétences) ;
-- aucun Scheduler ni System exécutant une logique de jeu ;
+- le cycle de vie complet (naître → grandir → vieillir → mourir) ;
+- les actions du joueur (moteur ACT : Intent → Plan → Action → Outcome) ;
+- la transmission de lignée à la mort ;
 - la couche `Rendering/` (Godot) ;
-- la sérialisation polymorphe des Components (n'a pas de sens tant qu'aucun
-  Component concret n'existe).
+- une sérialisation générique des Components (n'a de sens que lorsque leur
+  nombre rendra la liste explicite actuelle pénible à maintenir).
 
 ---
 
