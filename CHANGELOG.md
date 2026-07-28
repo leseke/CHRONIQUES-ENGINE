@@ -29,10 +29,19 @@ et non un calendrier.
   assumée, documentée sur `Entity.Restore`).
 - Tests : `AgingSystemTests`, extension d'`EntityTests` (CORE-002-H) et de
   `WorldSerializationTests` (round-trip du Lifecycle et de `AgeComponent`).
-- Modèle de temps tranché en équipe : 3 Ticks par saison, 4 saisons par
-  an, soit 12 Ticks par année simulée --- `AgingSystem` n'incrémente donc
-  l'âge d'un habitant qu'un Tick sur douze. À formaliser par un ADR avant
-  la v0.3 (GDB-008A ne fixe aucune conversion Tick → calendrier).
+- `Systems/CalendrierSimule.cs` : source unique de vérité pour la
+  conversion Tick → calendrier --- **un Tick = un mois simulé**, 3 mois
+  par saison, 4 saisons par an (structure du calendrier réel, décision
+  d'équipe à formaliser par un ADR avant la v0.3, GDB-008A ne fixant
+  aucune conversion Tick → calendrier). Expose `SaisonAu(Tick)` et
+  `AnneeAu(Tick)`, réutilisables par tout futur System ayant besoin de
+  savoir quelle saison il traverse (économie, besoins saisonniers...).
+  `AgingSystem` s'appuie désormais sur `CalendrierSimule.MoisParAn` au
+  lieu de dupliquer ses propres constantes. Les semaines ne sont
+  volontairement pas représentées à cette granularité --- voir le
+  commentaire XML de `CalendrierSimule` pour la justification.
+- Tests : `CalendrierSimuleTests` (bornes exactes de chaque saison et de
+  chaque année).
 - **Une hypothèse de travail reste non tranchée par la documentation**,
   introduite par ce lot et à confirmer par un ADR avant la v0.3 : les
   seuils d'âge / l'espérance de vie (GDB-008C nomme les étapes de vie

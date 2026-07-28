@@ -16,14 +16,11 @@ using Chroniques.Simulation.Kernel;
 ///
 /// --- Modèle de temps ---
 ///
-/// Le temps dans Chroniques est divisé en saisons (printemps, été, automne,
-/// hiver), avec 3 Ticks par saison et 4 saisons par an, soit 12 Ticks pour
-/// une année complète (voir constantes TicksParSaison, SaisonsParAn et
-/// TicksParAn).
-///
-/// Ce système permet de faire facilement la correspondance entre Ticks et
-/// mois (1 Tick = 1 mois) ou années (12 Ticks = 1 an), tout en préservant
-/// une granularité suffisante pour représenter le passage des saisons.
+/// Le rythme Tick → année simulée (un habitant vieillit d'un an tous les
+/// <see cref="CalendrierSimule.MoisParAn"/> Ticks) vient entièrement de
+/// <see cref="CalendrierSimule"/>, qui reste l'unique source de vérité pour
+/// la conversion Tick → calendrier --- ne pas dupliquer ces constantes ici
+/// ni ailleurs.
 ///
 /// Il reste une hypothèse de travail, non encore tranchée par la
 /// documentation, à traiter comme provisoire jusqu'à confirmation par un
@@ -41,12 +38,6 @@ public sealed class AgingSystem : ISystem
 {
     private const string EtatMort = "mort";
 
-    private const int TicksParSaison = 3;
-    private const int SaisonsParAn = 4;
-
-    private const int TicksParAn = TicksParSaison * SaisonsParAn;     // 12 Ticks par an
-    private const int TicksParMois = TicksParAn / 12;                // 1 Tick par mois
-    private const int TicksParSemaine = TicksParAn / 52;             // ~0.23 Tick par semaine (arrondi à 0)
     private readonly int _seuilAdolescence;
     private readonly int _seuilAgeAdulte;
     private readonly int _seuilMaturite;
@@ -84,8 +75,9 @@ public sealed class AgingSystem : ISystem
                 continue;
             }
 
-            // Incrémenter l'âge seulement tous les TicksParAn
-            if (currentTick.Value % TicksParAn == 0)
+            // Incrémenter l'âge seulement tous les CalendrierSimule.MoisParAn
+            // Ticks --- un habitant vieillit d'un an, jamais d'un mois.
+            if (currentTick.Value % CalendrierSimule.MoisParAn == 0)
             {
                 age.Annees++;
             }

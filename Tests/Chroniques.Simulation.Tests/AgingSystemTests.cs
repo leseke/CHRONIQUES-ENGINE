@@ -21,7 +21,7 @@ public class AgingSystemTests
         habitant.Set(new AgeComponent());
         var system = new AgingSystem();
 
-        for (var i = 1; i <= 12; i++)
+        for (var i = 1; i <= CalendrierSimule.MoisParAn; i++)
         {
             system.Update(world, new Tick(i));
         }
@@ -40,7 +40,7 @@ public class AgingSystemTests
         habitant.Set(new AgeComponent());
         var system = new AgingSystem();
 
-        for (var i = 1; i <= 11; i++)
+        for (var i = 1; i < CalendrierSimule.MoisParAn; i++)
         {
             system.Update(world, new Tick(i));
         }
@@ -70,9 +70,9 @@ public class AgingSystemTests
         habitant.Set(new AgeComponent { Annees = 17 });
         var system = new AgingSystem(seuilAgeAdulte: 18);
 
-        // Tick(12) : un multiple de TicksParAn, seul moment où l'âge
+        // Un multiple de CalendrierSimule.MoisParAn, seul moment où l'âge
         // s'incrémente réellement (17 → 18).
-        system.Update(world, new Tick(12));
+        system.Update(world, new Tick(CalendrierSimule.MoisParAn));
 
         Assert.Equal("age_adulte", habitant.Lifecycle.CurrentState.Name);
     }
@@ -85,9 +85,9 @@ public class AgingSystemTests
         habitant.Set(new AgeComponent { Annees = 79 });
         var system = new AgingSystem(esperanceDeVie: 80);
 
-        // Tick(12) : multiple de TicksParAn, seul moment où l'âge
+        // Un multiple de CalendrierSimule.MoisParAn, seul moment où l'âge
         // s'incrémente réellement (79 → 80).
-        system.Update(world, new Tick(12));
+        system.Update(world, new Tick(CalendrierSimule.MoisParAn));
 
         Assert.Equal("mort", habitant.Lifecycle.CurrentState.Name);
     }
@@ -100,12 +100,13 @@ public class AgingSystemTests
         habitant.Set(new AgeComponent { Annees = 79 });
         var system = new AgingSystem(esperanceDeVie: 80);
 
-        system.Update(world, new Tick(24));
+        var tickDeLaMort = new Tick(2 * CalendrierSimule.MoisParAn);
+        system.Update(world, tickDeLaMort);
 
         var evenement = Assert.Single(world.Events);
         Assert.Equal("vie.mort", evenement.Kind);
         Assert.Equal(habitant.Id, evenement.Source);
-        Assert.Equal(new Tick(24), evenement.OccurredAt);
+        Assert.Equal(tickDeLaMort, evenement.OccurredAt);
     }
 
     [Fact]

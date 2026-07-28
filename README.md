@@ -72,20 +72,28 @@ Implémenté :
   Systems), `NeedsDecaySystem` (déclin des besoins par Tick),
   `AgingSystem` (cycle de vie complet : enfance → adolescence → âge
   adulte → maturité → vieillesse → mort, avec Event `vie.mort` publié sur
-  le World à la mort) ;
+  le World à la mort), `CalendrierSimule` (traduction Tick → saison/année,
+  source unique de vérité pour ce calcul --- réutilisable par tout futur
+  System ayant besoin de savoir quelle saison il traverse, ex. économie,
+  besoins saisonniers) ;
 - `Persistence/` --- sauvegarde/rechargement JSON, capable de sérialiser
   `NeedsComponent`, `AgeComponent`, et l'état courant du `Lifecycle`
   (approche explicite, pas encore générique --- voir le commentaire XML de
   `WorldSnapshot.cs`) ;
 - un test par invariant du Kernel, par règle de `NeedsDecaySystem`/
-  `Scheduler`/`AgingSystem`, et par cas de rechargement
+  `Scheduler`/`AgingSystem`/`CalendrierSimule`, et par cas de rechargement
   (`Tests/Chroniques.Simulation.Tests/`).
 
-**Modèle de temps désormais tranché** (décision d'équipe, à formaliser par
-un ADR avant la v0.3, GDB-008A ne fixant aucune conversion Tick →
-calendrier) : 3 Ticks par saison, 4 saisons par an, soit 12 Ticks par
-année simulée. `AgingSystem` n'incrémente donc l'âge d'un habitant qu'un
-Tick sur douze, pas à chaque Tick.
+**Modèle de temps désormais tranché**, porté par `CalendrierSimule`
+(décision d'équipe, à formaliser par un ADR avant la v0.3, GDB-008A ne
+fixant aucune conversion Tick → calendrier) : **un Tick = un mois
+simulé**, 3 mois par saison, 4 saisons par an --- exactement la structure
+du calendrier réel, pas une invention propre à Chroniques. Un habitant
+vieillit donc d'un an tous les 12 Ticks (`AgingSystem`), et n'importe quel
+autre System peut demander `CalendrierSimule.SaisonAu(tick)` pour savoir
+quelle saison il traverse. Les semaines ne sont volontairement pas
+représentées à ce niveau de granularité (voir le commentaire XML de
+`CalendrierSimule` pour la justification).
 
 **Une hypothèse de travail reste non tranchée par la documentation**,
 introduite par `AgingSystem` et documentée dans son commentaire XML --- à
