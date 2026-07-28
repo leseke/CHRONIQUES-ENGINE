@@ -1,6 +1,7 @@
 using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 using Chroniques.Simulation.Persistence;
+using Chroniques.Simulation.Systems;
 using Xunit;
 
 namespace Chroniques.Simulation.Tests;
@@ -64,6 +65,23 @@ public class WorldSerializationTests
         Assert.Equal(40, needsRecharge.Fatigue);
         Assert.Equal(90, needsRecharge.Sante);
         Assert.Equal(55, needsRecharge.Moral);
+    }
+
+    [Fact]
+    public void Letat_du_lifecycle_dune_entity_survit_au_rechargement()
+    {
+        var original = new World(seed: 3);
+        var habitant = original.Spawn();
+        habitant.Set(new AgeComponent { Annees = 80 });
+        new AgingSystem(esperanceDeVie: 80).Update(original, new Tick(1));
+
+        var json = WorldRepository.Save(original);
+        var recharge = WorldRepository.Load(json);
+
+        Assert.True(recharge.TryGetEntity(habitant.Id, out var habitantRecharge));
+        Assert.Equal("mort", habitantRecharge.Lifecycle.CurrentState.Name);
+        Assert.True(habitantRecharge.TryGet<AgeComponent>(out var ageRecharge));
+        Assert.Equal(80, ageRecharge.Annees);
     }
 
     [Fact]

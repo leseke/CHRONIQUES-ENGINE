@@ -38,7 +38,7 @@ public sealed class World
 
     public Entity Spawn()
     {
-        var entity = Entity.Create();
+        var entity = Entity.Create(CurrentTick);
         _entities[entity.Id] = entity;
         return entity;
     }

@@ -45,10 +45,11 @@ MASTER-005 l'exigera, jamais par anticipation (MASTER-006).
 
 ---
 
-## État actuel --- v0.2, Un être vivant (en cours)
+## État actuel --- v0.2, Un être vivant (cycle de vie ajouté, à valider)
 
-Critère de sortie v0.1 (atteint) : *« le noyau tourne, tous les tests de
-lois passent, un World vide se sauvegarde et se recharge à l'identique. »*
+Critère de sortie v0.1 (atteint et vérifié) : *« le noyau tourne, tous les
+tests de lois passent, un World vide se sauvegarde et se recharge à
+l'identique. »*
 
 Critère de sortie v0.2 (MASTER-005) : *« un personnage naît, vit ses
 besoins année après année, et meurt. Tout est observable sans aucun
@@ -60,23 +61,51 @@ Implémenté :
   `Entity`, `IComponent`, `Value<T>`, `State`, `Relation`, `GameEvent`,
   `Tick` (Time), `SpaceRef` (Space), `Lifecycle` ;
 - un `World` déterministe (`DeterministicRandom` à graine) ;
+- `Entity` ↔ `Lifecycle`, désormais reliés dès la création (CORE-002-H :
+  « une Entity possède un Lifecycle ») --- écart comblé en v0.2, la
+  primitive existait depuis v0.1 sans qu'aucune Entity n'y soit rattachée ;
 - `Components/NeedsComponent.cs` --- premier Component métier (GDB-004B) :
   faim, fatigue, santé, moral ;
+- `Components/AgeComponent.cs` --- second Component métier (GDB-008C) :
+  l'âge en années simulées ;
 - `Systems/` --- `ISystem`, `Scheduler` (Tick + invocation ordonnée des
-  Systems), `NeedsDecaySystem` (déclin des besoins par Tick) ;
-- `Persistence/` --- sauvegarde/rechargement JSON, désormais capable de
-  sérialiser `NeedsComponent` (approche explicite, pas encore générique ---
-  voir le commentaire XML de `WorldSnapshot.cs`) ;
-- un test par invariant du Kernel et par règle de `NeedsDecaySystem`/`Scheduler`
+  Systems), `NeedsDecaySystem` (déclin des besoins par Tick),
+  `AgingSystem` (cycle de vie complet : enfance → adolescence → âge
+  adulte → maturité → vieillesse → mort, avec Event `vie.mort` publié sur
+  le World à la mort) ;
+- `Persistence/` --- sauvegarde/rechargement JSON, capable de sérialiser
+  `NeedsComponent`, `AgeComponent`, et l'état courant du `Lifecycle`
+  (approche explicite, pas encore générique --- voir le commentaire XML de
+  `WorldSnapshot.cs`) ;
+- un test par invariant du Kernel, par règle de `NeedsDecaySystem`/
+  `Scheduler`/`AgingSystem`, et par cas de rechargement
   (`Tests/Chroniques.Simulation.Tests/`).
 
-Pas encore implémenté, volontairement --- appartient à la suite de v0.2 et
-à v0.3 (MASTER-005) :
+**Modèle de temps désormais tranché** (décision d'équipe, à formaliser par
+un ADR avant la v0.3, GDB-008A ne fixant aucune conversion Tick →
+calendrier) : 3 Ticks par saison, 4 saisons par an, soit 12 Ticks par
+année simulée. `AgingSystem` n'incrémente donc l'âge d'un habitant qu'un
+Tick sur douze, pas à chaque Tick.
 
-- le cycle de vie complet (naître → grandir → vieillir → mourir) ;
+**Une hypothèse de travail reste non tranchée par la documentation**,
+introduite par `AgingSystem` et documentée dans son commentaire XML --- à
+confirmer ou corriger par un ADR avant la v0.3 :
+
+- Les seuils d'âge (adolescence, âge adulte, maturité, vieillesse) et
+  l'espérance de vie --- GDB-008C nomme les étapes de vie sans fixer les
+  âges de bascule ; aucun document ne fixe d'espérance de vie. Ces
+  valeurs sont des paramètres du constructeur d'`AgingSystem` (mêmes
+  valeurs par défaut que le code, à ne pas recopier ailleurs comme si
+  elles étaient officielles).
+
+Pas encore implémenté, volontairement --- appartient à v0.3 (MASTER-005) :
+
 - les actions du joueur (moteur ACT : Intent → Plan → Action → Outcome) ;
 - la transmission de lignée à la mort ;
 - la couche `Rendering/` (Godot) ;
+- l'historique complet du Lifecycle à travers la persistance (seul l'état
+  courant survit au rechargement pour l'instant --- voir le commentaire XML
+  d'`Entity.Restore`) ;
 - une sérialisation générique des Components (n'a de sens que lorsque leur
   nombre rendra la liste explicite actuelle pénible à maintenir).
 

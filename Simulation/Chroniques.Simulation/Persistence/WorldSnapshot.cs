@@ -14,8 +14,19 @@ using Chroniques.Simulation.Kernel;
 /// mécanisme générique. Ce choix sera reconsidéré --- et tracé par un ADR
 /// --- le jour où le nombre de Components rendra cette liste manuelle
 /// pénible à maintenir (MASTER-006 : pas d'anticipation sans motif réel).
+///
+/// <paramref name="LifecycleCreatedAt"/> et <paramref name="LifecycleState"/>
+/// couvrent la partie du Lifecycle nécessaire à v0.2 : savoir qu'un
+/// personnage rechargé est toujours vivant, en vieillesse, ou déjà mort.
+/// L'historique complet des Events qui ont mené à cet état n'est pas encore
+/// persisté --- limite assumée, documentée sur <see cref="Kernel.Entity.Restore"/>.
 /// </summary>
-public sealed record EntitySnapshot(Guid Id, NeedsComponent? Needs);
+public sealed record EntitySnapshot(
+    Guid Id,
+    long LifecycleCreatedAt,
+    string LifecycleState,
+    NeedsComponent? Needs,
+    AgeComponent? Age);
 
 /// <summary>
 /// Représentation sérialisable d'un <see cref="World"/>.

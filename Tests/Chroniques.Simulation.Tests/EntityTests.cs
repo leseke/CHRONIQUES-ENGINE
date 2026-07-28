@@ -31,6 +31,16 @@ public class EntityTests
     }
 
     [Fact]
+    public void Une_entity_nait_toujours_avec_un_lifecycle_vivant()
+    {
+        // CORE-002-H : « une Entity... possède un Lifecycle ».
+        var entity = Entity.Create(new Tick(3));
+
+        Assert.Equal(new Tick(3), entity.Lifecycle.CreatedAt);
+        Assert.Equal("vivant", entity.Lifecycle.CurrentState.Name);
+    }
+
+    [Fact]
     public void Une_entity_peut_exister_sans_aucun_component()
     {
         // CORE-002-B, section 4 : l'absence d'un Component ne remet pas en

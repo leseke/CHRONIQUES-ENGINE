@@ -24,7 +24,13 @@ public static class WorldRepository
             .Select(entity =>
             {
                 entity.TryGet<Components.NeedsComponent>(out var needs);
-                return new EntitySnapshot(entity.Id.Value, needs);
+                entity.TryGet<Components.AgeComponent>(out var age);
+                return new EntitySnapshot(
+                    entity.Id.Value,
+                    entity.Lifecycle.CreatedAt.Value,
+                    entity.Lifecycle.CurrentState.Name,
+                    needs,
+                    age);
             })
             .ToList();
 
@@ -50,11 +56,19 @@ public static class WorldRepository
             // vit dans le même assembly que Entity, précisément pour que ce
             // mécanisme de reconstruction reste réservé à la persistance et
             // ne devienne jamais une API publique de création d'Entity.
-            var entity = Entity.Restore(new EntityId(entitySnapshot.Id));
+            var entity = Entity.Restore(
+                new EntityId(entitySnapshot.Id),
+                new Tick(entitySnapshot.LifecycleCreatedAt),
+                entitySnapshot.LifecycleState);
 
             if (entitySnapshot.Needs is not null)
             {
                 entity.Set(entitySnapshot.Needs);
+            }
+
+            if (entitySnapshot.Age is not null)
+            {
+                entity.Set(entitySnapshot.Age);
             }
 
             world.Reintroduce(entity);
