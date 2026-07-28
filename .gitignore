@@ -1,0 +1,16 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Godot (à activer quand Rendering/ contiendra un projet Godot)
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+
+## Divers
+.DS_Store
+*.log

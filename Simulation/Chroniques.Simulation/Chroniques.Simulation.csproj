@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Chroniques.Simulation</RootNamespace>
+
+    <!--
+      ADR-002, point 2 : la simulation ne dépend d'aucun moteur de rendu.
+      Ce projet ne référence et ne référencera jamais Godot ni aucune
+      bibliothèque graphique. C'est un invariant, pas une préférence.
+    -->
+  </PropertyGroup>
+
+</Project>
