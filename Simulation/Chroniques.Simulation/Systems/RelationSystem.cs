@@ -22,9 +22,11 @@ using SocialRelation = Chroniques.Simulation.Components.Relation;
 /// Invariants (ENGINE-008, section 6) :
 ///   - La Force reste toujours bornée entre 0 et 100.
 ///   - Une relation Familiale ne descend pas sous son plancher par la seule
-///     érosion. Un effet d'interaction négatif suffisant peut l'y amener ---
-///     une relation Familiale peut donc disparaître par acte délibéré, pas
-///     par le seul écoulement du temps (GDB-009C, ENGINE-008 v1.3).
+///     érosion.
+///   - Si une interaction négative l'a déjà fait descendre sous le plancher,
+///     l'érosion naturelle ne doit jamais la faire remonter artificiellement.
+///   - Un effet d'interaction négatif suffisant peut rompre une relation
+///     Familiale.
 ///   - Un Épisode n'est créé que si |impact| ≥ seuilImportance.
 ///   - Au-delà de la capacité, le plus ancien Épisode est retiré en
 ///     priorité, jamais le plus marquant.
@@ -52,7 +54,13 @@ public sealed class RelationSystem : ISystem
     }
 
     /// <summary>
-    /// Érosion naturelle de toutes les relations actives à chaque Tick.
+    /// Applique l'érosion naturelle de toutes les relations actives.
+    ///
+    /// Règle particulière des relations Familiales :
+    /// - si la Force est au-dessus du plancher, l'érosion peut la faire
+    ///   descendre jusqu'au plancher mais jamais en dessous ;
+    /// - si la Force est déjà sous le plancher à la suite d'une interaction,
+    ///   l'érosion ne la modifie pas et surtout ne la remonte pas.
     /// </summary>
     public void Update(World world, Tick currentTick)
     {
@@ -65,13 +73,38 @@ public sealed class RelationSystem : ISystem
 
             foreach (var relation in rc.Relations)
             {
-                var plancher = relation.Type == TypeRelation.Familiale
-                    ? _plancherFamilial
-                    : 0.0;
-
-                relation.Force = Math.Max(
-                    plancher,
-                    relation.Force - _erosionParTick);
+                if (relation.Type == TypeRelation.Familiale)
+                {
+                    /*
+                     * Le plancher familial est uniquement une protection
+                     * contre l'érosion naturelle.
+                     *
+                     * Exemple :
+                     * Force = 15, plancher = 10, érosion = 10
+                     * => Force devient 10.
+                     *
+                     * Exemple :
+                     * Force = 5 après une interaction négative,
+                     * plancher = 10
+                     * => Force reste 5.
+                     *
+                     * On ne doit jamais faire :
+                     * Math.Max(10, 5 - erosion)
+                     * car cela remonterait artificiellement la relation.
+                     */
+                    if (relation.Force > _plancherFamilial)
+                    {
+                        relation.Force = Math.Max(
+                            _plancherFamilial,
+                            relation.Force - _erosionParTick);
+                    }
+                }
+                else
+                {
+                    relation.Force = Math.Max(
+                        0.0,
+                        relation.Force - _erosionParTick);
+                }
 
                 if (relation.Force <= 0)
                 {
@@ -88,12 +121,13 @@ public sealed class RelationSystem : ISystem
 
     /// <summary>
     /// Enregistre une interaction qualifiante entre deux habitants.
-    /// Crée la relation si elle n'existe pas encore. Applique l'impact.
+    /// Crée la relation si elle n'existe pas encore.
+    /// Applique l'impact à la Force.
     /// Crée un Épisode si |impact| ≥ seuilImportance.
-    /// Supprime la relation si la Force tombe à 0 après interaction négative.
+    /// Supprime la relation si la Force atteint 0.
     ///
-    /// Appelé exclusivement depuis le résolveur d'Effects (ENGINE-008,
-    /// section 5.1) --- jamais depuis Update.
+    /// Appelé depuis le résolveur d'Effects (ENGINE-008, section 5.1),
+    /// jamais depuis Update.
     /// </summary>
     public void EnregistrerInteraction(
         World world,
@@ -126,8 +160,8 @@ public sealed class RelationSystem : ISystem
 
         relation.Force = Math.Clamp(
             relation.Force + impact,
-            0,
-            100);
+            0.0,
+            100.0);
 
         if (Math.Abs(impact) >= _seuilImportanceEpisode)
         {
