@@ -4,87 +4,97 @@ using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 
 /// <summary>
-/// Fait évoluer <see cref="SkillComponent"/> à chaque Tick, conformément
-/// à GDB-004H (Les Compétences). Toute la logique vit ici, jamais dans
-/// le Component (CORE-003-C).
+/// Implémente GDB-004J (La Transmission) : déclenche la transmission au
+/// moment où une Entity passe à l'état « mort » (ENGINE-008, section 3).
 ///
-/// Deux responsabilités distinctes (ENGINE-008, section 3) :
-///   1. Déclin par inactivité à chaque Tick (Update).
-///   2. Enregistrement d'une pratique qualifiante (Pratiquer), appelé
-///      exclusivement depuis le résolveur d'Effects (ENGINE-008, section
-///      5.1) --- jamais depuis Update.
+/// Détecte la mort en inspectant directement le <see cref="Lifecycle"/>
+/// de chaque Entity --- jamais en lisant <see cref="World.Events"/> comme
+/// canal de coordination (ENGINE-001 reste un journal d'observabilité,
+/// ENGINE-008 section 7, invariant).
+///
+/// Doit être enregistré après <see cref="AgingSystem"/> dans le Scheduler
+/// (ENGINE-008, section 5) : condition nécessaire pour que le Lifecycle
+/// d'une Entity décédée ce même Tick soit déjà à l'état « mort » quand
+/// Update s'exécute.
 ///
 /// Invariants (ENGINE-008, section 6 et v1.3) :
-///   - Le Niveau reste toujours borné entre 0 et 100.
-///   - Le gain est strictement décroissant avec le Niveau : à Niveau 0,
-///     gain maximal ; à Niveau 100, gain nul. La forme retenue est
-///     proportionnelle à (1 - Niveau/100), ce qui donne une courbe
-///     linéairement décroissante, compatible avec le comportement
-///     qualitatif fixé par ENGINE-008 v1.3 (chaque point supplémentaire
-///     rend la progression marginalement plus difficile).
-///   - Le déclin ne s'applique qu'après le seuil d'inactivité.
+///   - Une Entity déjà traitée n'est jamais retraitée (HashSet de garde).
+///   - L'un des trois cas d'échec de GDB-004J s'applique systématiquement
+///     quand la désignation ou la transmission n'aboutit pas normalement ---
+///     jamais de sortie silencieuse.
+///   - HeritageSystem ne modifie jamais RelationComponent directement ---
+///     il le lit pour désigner l'héritier.
 /// </summary>
-public sealed class SkillSystem : ISystem
+public sealed class HeritageSystem : ISystem
 {
-    private readonly double _facteurGain;
-    private readonly int _seuilInactiviteTicks;
-    private readonly double _declinParTickInactif;
+    private const string EtatMort = "mort";
 
-    public SkillSystem(
-        double facteurGain = 5.0,
-        int seuilInactiviteTicks = 30,
-        double declinParTickInactif = 0.2)
-    {
-        _facteurGain = facteurGain;
-        _seuilInactiviteTicks = seuilInactiviteTicks;
-        _declinParTickInactif = declinParTickInactif;
-    }
+    private readonly HashSet<EntityId> _dejaTrait = new();
 
-    /// <summary>
-    /// Déclin par inactivité de toutes les compétences non pratiquées
-    /// au-delà du seuil.
-    /// </summary>
     public void Update(World world, Tick currentTick)
     {
         foreach (var entity in world.Entities)
         {
-            if (!entity.TryGet<SkillComponent>(out var sc))
+            if (entity.Lifecycle.CurrentState.Name != EtatMort)
                 continue;
 
-            foreach (var competence in sc.Competences.Values)
-            {
-                var ticksInactif = currentTick.Value - competence.DernierePratique.Value;
+            if (_dejaTrait.Contains(entity.Id))
+                continue;
 
-                if (ticksInactif > _seuilInactiviteTicks)
-                {
-                    competence.Niveau = Math.Max(0, competence.Niveau - _declinParTickInactif);
-                }
-            }
+            _dejaTrait.Add(entity.Id);
+            TraiterTransmission(world, entity, currentTick);
         }
     }
 
-    /// <summary>
-    /// Enregistre une pratique qualifiante : gain de Niveau décroissant
-    /// avec le Niveau actuel (ENGINE-008 v1.3, cas limite verrouillé).
-    ///
-    /// Appelé exclusivement depuis le résolveur d'Effects (ENGINE-008,
-    /// section 5.1) --- jamais depuis Update.
-    /// </summary>
-    public void Pratiquer(World world, Tick tick, EntityId entityId, string nomCompetence)
+    private void TraiterTransmission(World world, Entity defunt, Tick tick)
     {
-        if (!world.TryGetEntity(entityId, out var entity))
+        var heritier = DesignerHeritier(world, defunt);
+
+        if (heritier is null)
+        {
+            // Cas d'échec 1 : absence de successeur (GDB-004J)
+            world.Publish(GameEvent.Create(
+                tick,
+                "heritage.absence-successeur",
+                source: defunt.Id));
             return;
+        }
 
-        if (!entity.TryGet<SkillComponent>(out var sc))
-            return;
+        // En Phase 1 : le refus est déclenché manuellement par le joueur.
+        // En Phase 3 : il sera déclenché par un HeritageRefusalEffect
+        // produit par un Intent de l'héritier via le pipeline (ENGINE-008 v1.3).
+        // Ici, on publie simplement l'événement de transmission réussie.
+        world.Publish(GameEvent.Create(
+            tick,
+            "heritage.transmission",
+            source: defunt.Id,
+            target: heritier.Id));
+    }
 
-        var competence = sc.ObtenirOuCreer(nomCompetence, tick);
+    /// <summary>
+    /// Désigne l'héritier selon l'algorithme déterministe de GDB-004J :
+    ///   1. Priorité aux relations Familiales (Force la plus élevée).
+    ///   2. En cas d'égalité de Force : relation créée au Tick le plus bas.
+    ///   3. Si aucune relation Familiale : même règle sur toutes les relations.
+    ///   4. Si aucune relation : null (absence de successeur).
+    /// </summary>
+    private static Entity? DesignerHeritier(World world, Entity defunt)
+    {
+        if (!defunt.TryGet<RelationComponent>(out var rc) || rc.Relations.Count == 0)
+            return null;
 
-        // Gain linéairement décroissant : maximal à Niveau 0, nul à Niveau 100.
-        // Comportement qualitatif fixé par ENGINE-008 v1.3, forme exacte
-        // laissée libre (paramètre d'implémentation).
-        var gain = _facteurGain * (1.0 - competence.Niveau / 100.0);
-        competence.Niveau = Math.Clamp(competence.Niveau + gain, 0, 100);
-        competence.DernierePratique = tick;
+        var candidates = rc.Relations
+            .Where(r => r.Type == TypeRelation.Familiale)
+            .ToList();
+
+        if (candidates.Count == 0)
+            candidates = rc.Relations.ToList();
+
+        var meilleure = candidates
+            .OrderByDescending(r => r.Force)
+            .ThenBy(r => r.CreeeAu.Value)
+            .First();
+
+        return world.TryGetEntity(meilleure.Cible, out var heritier) ? heritier : null;
     }
 }
