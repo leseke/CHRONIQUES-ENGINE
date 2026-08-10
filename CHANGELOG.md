@@ -1,80 +1,625 @@
-# Changelog --- Chroniques (moteur)
+# CHANGELOG — CHRONIQUES-ENGINE
 
-Ce fichier retrace l'historique des versions du **code**. Les décisions
-d'architecture qui justifient ces versions vivent dans le registre ADR du
-dépôt de documentation (`chroniques--main/ADR/`), pas ici.
+Toutes les évolutions significatives du moteur Chroniques sont consignées dans ce document.
 
-Format : [Semantic Versioning](https://semver.org/lang/fr/). Les versions
-suivent les jalons de `MASTER-005` (v0.1 « Le noyau », v0.2 « Une vie », etc.),
-et non un calendrier.
+Le format suit l'évolution réelle du moteur et non uniquement les commits Git.
 
 ---
 
-## [Non publié]
+# [Unreleased]
 
-### Ajouté --- v0.2, cycle de vie complet (en cours de vérification)
+## À venir
 
-- `Entity` relié à `Lifecycle` dès sa création (CORE-002-H), écart présent
-  depuis v0.1 --- `World.Spawn()` transmet désormais le Tick courant à
-  `Entity.Create()`.
-- Second Component métier : `Components/AgeComponent.cs` (GDB-008C ---
-  l'âge en années simulées).
-- `Systems/AgingSystem.cs` : fait progresser l'âge et le Lifecycle de
-  chaque personnage (enfance → adolescence → âge adulte → maturité →
-  vieillesse → mort), publie un Event `vie.mort` sur le World à la mort.
-  Complète le critère de sortie v0.2 de MASTER-005.
-- `Persistence/` étendu : `EntitySnapshot` couvre désormais l'état courant
-  du Lifecycle (`LifecycleCreatedAt`, `LifecycleState`) et `AgeComponent`.
-  L'historique complet du Lifecycle n'est pas encore persisté (limite
-  assumée, documentée sur `Entity.Restore`).
-- Tests : `AgingSystemTests`, extension d'`EntityTests` (CORE-002-H) et de
-  `WorldSerializationTests` (round-trip du Lifecycle et de `AgeComponent`).
-- `Systems/CalendrierSimule.cs` : source unique de vérité pour la
-  conversion Tick → calendrier --- **un Tick = un mois simulé**, 3 mois
-  par saison, 4 saisons par an (structure du calendrier réel, décision
-  d'équipe à formaliser par un ADR avant la v0.3, GDB-008A ne fixant
-  aucune conversion Tick → calendrier). Expose `SaisonAu(Tick)` et
-  `AnneeAu(Tick)`, réutilisables par tout futur System ayant besoin de
-  savoir quelle saison il traverse (économie, besoins saisonniers...).
-  `AgingSystem` s'appuie désormais sur `CalendrierSimule.MoisParAn` au
-  lieu de dupliquer ses propres constantes. Les semaines ne sont
-  volontairement pas représentées à cette granularité --- voir le
-  commentaire XML de `CalendrierSimule` pour la justification.
-- Tests : `CalendrierSimuleTests` (bornes exactes de chaque saison et de
-  chaque année).
-- **Une hypothèse de travail reste non tranchée par la documentation**,
-  introduite par ce lot et à confirmer par un ADR avant la v0.3 : les
-  seuils d'âge / l'espérance de vie (GDB-008C nomme les étapes de vie
-  sans fixer d'âges de bascule). Détail dans le commentaire XML
-  d'`AgingSystem`.
-- **Non encore compilé dans cet environnement** --- rédigé sans SDK .NET
-  disponible, comme le lot précédent. À vérifier avec
-  `dotnet build && dotnet test` avant de considérer ce lot comme acquis.
+Les prochains lots seront définis par les documents d'autorité du dépôt `CHRONIQUES`.
 
-### Ajouté --- v0.2, besoins et scheduler
+Candidats identifiés mais non encore implémentés :
 
-- Premier Component métier : `Components/NeedsComponent.cs` (GDB-004B ---
-  faim, fatigue, santé, moral).
-- `Systems/` : `ISystem`, `Scheduler` (Tick + invocation ordonnée),
-  `NeedsDecaySystem` (déclin des besoins, GDB-004B section Évolution).
-- `Persistence/` déplacé hors de `Kernel/` (la persistance connaît
-  désormais les Components métier, ce n'est plus une responsabilité pure
-  du Kernel) et étendu pour sérialiser `NeedsComponent`.
-- Tests : `NeedsComponentTests`, `NeedsDecaySystemTests`, `SchedulerTests`,
-  et extension de `WorldSerializationTests` pour couvrir le round-trip
-  d'un Component métier.
+- mémoire des habitants ;
+- perception ;
+- croyances ;
+- émotions ;
+- réputation ;
+- patrimoine matériel ;
+- transmission complète ;
+- progression de la simulation sociale ;
+- généralisation éventuelle du mécanisme d'application des Effects.
 
-### Ajouté --- v0.1
+Aucun de ces éléments n'est considéré comme engagé tant que la spécification correspondante n'est pas validée.
 
-- Structure du dépôt (`Simulation/`, `Content/`, `Rendering/`, `Tools/`,
-  `Documentation/`, `Tests/`), conforme à `PROD/FeuilleDeRoute.md`.
-- Kernel minimal (v0.1) : les neuf primitives (`Entity`, `IComponent`,
-  `Value<T>`, `State`, `Relation`, `GameEvent`, `Tick`, `SpaceRef`,
-  `Lifecycle`), un `World` déterministe, la sauvegarde/rechargement JSON.
-- Un test par invariant du Kernel (`Tests/Chroniques.Simulation.Tests/`).
+---
 
-### Validé
+# [0.3.0-dev] — Systems de population
 
-- v0.1 : Compilation et exécution des tests confirmées (`dotnet build && dotnet test`) : 18/18 tests réussis, 0 échec. Le critère de sortie v0.1 de MASTER-005 est atteint : le noyau tourne, tous les tests de lois passent, un World vide (et un World peuplé) se sauvegarde et se recharge à l'identique.
-- v0.2 (besoins et scheduler) : Compilation et exécution des tests confirmées (`dotnet build && dotnet test`) : 30/30 tests réussis, 0 échec.
-- v0.2 (cycle de vie complet) : **non encore compilé** --- rédigé sans SDK .NET disponible dans l'environnement de rédaction. À vérifier avec `dotnet build && dotnet test` avant de considérer ce lot comme acquis, et avant de le considérer comme atteignant réellement le critère de sortie v0.2 (« un personnage naît, vit ses besoins année après année, et meurt »).
+## État
+
+```text
+Build : réussi
+Tests : 122 / 122 réussis
+Échecs : 0
+```
+
+Cette phase introduit les premières briques concrètes de population au-dessus du Kernel et du pipeline d'Actions.
+
+---
+
+## Ajout — RelationComponent
+
+Ajout de la représentation des relations sociales d'une Entity.
+
+Une relation peut contenir notamment :
+
+- cible ;
+- type ;
+- Force ;
+- Tick de création ;
+- Épisodes significatifs.
+
+Types de relations introduits :
+
+- Familiale ;
+- Amicale ;
+- Professionnelle ;
+- Commerciale ;
+- Politique ;
+- Conflictuelle ;
+- Sentimentale.
+
+---
+
+## Ajout — RelationSystem
+
+Ajout du System responsable de l'évolution des relations.
+
+Fonctionnalités :
+
+- érosion naturelle ;
+- plancher familial ;
+- création de relation ;
+- interactions positives et négatives ;
+- suppression à Force `0` ;
+- création d'Épisodes significatifs ;
+- capacité limitée d'Épisodes ;
+- éviction du plus ancien.
+
+---
+
+## Correction — Plancher familial
+
+Correction d'un bug logique dans lequel une relation Familiale passée sous son plancher à la suite d'une interaction négative pouvait être remontée artificiellement au plancher par l'érosion du Tick suivant.
+
+Ancien comportement incorrect :
+
+```text
+Plancher = 10
+Force après interaction = 5
+
+Tick suivant
+↓
+Force = 10
+```
+
+Nouveau comportement :
+
+```text
+Plancher = 10
+Force après interaction = 5
+
+Tick suivant
+↓
+Force = 5
+```
+
+La règle devient :
+
+```text
+Force > plancher
+→ érosion jusqu'au plancher
+
+Force <= plancher
+→ aucune érosion naturelle supplémentaire
+→ aucune remontée artificielle
+```
+
+Une interaction négative suffisamment forte peut toujours atteindre `0` et rompre la relation Familiale.
+
+---
+
+## Tests — Plancher familial
+
+Ajout des tests de non-régression :
+
+```text
+Erosion_RelationFamiliale_AuDessusDuPlancher_DescendJusquAuPlancher
+```
+
+et :
+
+```text
+Erosion_RelationFamiliale_DejaSousPlancher_NeRemontePas
+```
+
+Le nombre total de tests est alors passé de :
+
+```text
+116
+```
+
+à :
+
+```text
+118
+```
+
+avec :
+
+```text
+118 / 118 réussis
+```
+
+---
+
+## Ajout — SkillComponent
+
+Ajout de la représentation des Compétences d'une Entity.
+
+Chaque Compétence contient notamment :
+
+```text
+Niveau
+DernierePratique
+```
+
+---
+
+## Ajout — SkillSystem
+
+Ajout de la logique de Compétences.
+
+Fonctionnalités :
+
+- création à la première pratique ;
+- progression ;
+- gain marginal décroissant ;
+- borne `0..100` ;
+- suivi de la dernière pratique ;
+- déclin après inactivité.
+
+---
+
+## Tests — SkillSystem
+
+Ajout des validations concernant :
+
+- gain maximal depuis Niveau `0` ;
+- gain décroissant ;
+- saturation à proximité du Niveau `100` ;
+- absence de déclin avant seuil ;
+- déclin après seuil ;
+- application de `SkillPracticeEffect`.
+
+---
+
+## Ajout — HeritageSystem
+
+Ajout du premier système minimal de transmission.
+
+`HeritageSystem` :
+
+- inspecte directement le `Lifecycle` ;
+- détecte les Entities à l'état `"mort"` ;
+- ne lit jamais `World.Events` pour décider d'agir ;
+- désigne un héritier ;
+- évite tout retraitement d'une Entity morte ;
+- publie des événements observables.
+
+---
+
+## Ajout — Algorithme de désignation
+
+Ordre déterministe :
+
+```text
+Relations Familiales prioritaires
+↓
+Force la plus élevée
+↓
+égalité
+↓
+relation la plus ancienne
+```
+
+En l'absence de successeur valide :
+
+```text
+heritage.absence-successeur
+```
+
+est publié dans le journal observable.
+
+---
+
+## Ajout — Effects de population
+
+Ajout de :
+
+```text
+RelationInteractionEffect
+SkillPracticeEffect
+HeritageRefusalEffect
+```
+
+Ces Effects constituent des données décrivant les conséquences produites par des Actions.
+
+---
+
+## Ajout — PopulationEffectApplicator
+
+Introduction d'un résolveur spécialisé pour les Effects de population.
+
+Flux :
+
+```text
+Action
+↓
+Effect
+↓
+PopulationEffectApplicator
+↓
+System responsable
+↓
+World
+```
+
+Dispatch actuel :
+
+```text
+RelationInteractionEffect
+→ RelationSystem
+```
+
+```text
+SkillPracticeEffect
+→ SkillSystem
+```
+
+```text
+HeritageRefusalEffect
+→ HeritageSystem
+```
+
+Le pipeline d'Actions ne dépend donc pas directement des Systems de population.
+
+---
+
+## Correction — Refus d'héritage
+
+La première implémentation faisait porter une partie de la logique du refus directement par `PopulationEffectApplicator`.
+
+Cette responsabilité a été corrigée.
+
+Nouveau flux :
+
+```text
+HeritageRefusalEffect
+↓
+PopulationEffectApplicator
+↓
+HeritageSystem.RefuserHeritage
+↓
+World.Publish
+```
+
+`HeritageSystem` constitue désormais l'unique source de vérité pour cette logique.
+
+---
+
+## Tests — Refus d'héritage
+
+Ajout de tests concernant :
+
+- refus direct via `HeritageSystem` ;
+- héritier inexistant ;
+- défunt inexistant ;
+- dispatch de `HeritageRefusalEffect` vers `HeritageSystem`.
+
+Après ces tests :
+
+```text
+122 / 122 tests réussis
+```
+
+---
+
+## Différé — Transmission incomplète
+
+La transmission incomplète prévue conceptuellement par GDB-004J n'est pas implémentée.
+
+Elle nécessite encore une représentation explicite de :
+
+- patrimoine ;
+- éléments transmissibles ;
+- redistribution.
+
+Elle reste volontairement différée plutôt que simulée avec des structures prématurées.
+
+---
+
+# [0.2.0] — Action Pipeline et infrastructure de simulation
+
+## Ajout — Action Pipeline
+
+Introduction des premières briques permettant de passer d'une intention à une action résolue.
+
+Architecture :
+
+```text
+Intent
+↓
+Planner
+↓
+Plan
+↓
+Action Instance
+↓
+Execution Engine
+↓
+Outcome
+```
+
+Cette architecture traduit progressivement les contrats de la bibliothèque ACT dans le moteur.
+
+---
+
+## Ajout — Intent
+
+Introduction de la représentation d'une intention d'acteur.
+
+Un Intent exprime un objectif et non sa méthode d'exécution.
+
+---
+
+## Ajout — Planner
+
+Ajout d'une première infrastructure de planification.
+
+Le Planner traduit un Intent réalisable en Plan.
+
+---
+
+## Ajout — Plan
+
+Introduction d'une représentation structurée du chemin d'exécution d'un Intent.
+
+---
+
+## Ajout — ActionDefinition / ActionInstance
+
+Séparation entre :
+
+```text
+définition d'une Action
+```
+
+et :
+
+```text
+instance concrète d'exécution
+```
+
+afin de permettre plusieurs exécutions contextualisées d'une même Action.
+
+---
+
+## Ajout — Outcome
+
+Ajout d'une représentation explicite du résultat d'une Action.
+
+Cette couche prépare la séparation entre résolution d'une Action et application de ses conséquences.
+
+---
+
+## Ajout — Scheduler
+
+Ajout de l'orchestrateur temporel des Systems.
+
+Le Scheduler garantit :
+
+- ordre déterministe ;
+- progression du Tick ;
+- exécution reproductible.
+
+---
+
+## Ajout — AgingSystem
+
+Ajout de la progression d'âge et des premières transitions de Lifecycle.
+
+---
+
+## Ajout — NeedsDecaySystem
+
+Ajout de l'évolution automatique des besoins au fil du temps.
+
+---
+
+## Ajout — CalendrierSimule
+
+Ajout de la traduction du Tick en informations temporelles de simulation.
+
+---
+
+## Ajout — Tests
+
+Couverture étendue pour :
+
+- Scheduler ;
+- AgingSystem ;
+- NeedsDecaySystem ;
+- calendrier ;
+- Action Pipeline ;
+- déterminisme.
+
+---
+
+# [0.1.0] — Fondations du moteur
+
+## Ajout — Kernel
+
+Création des premières primitives du moteur.
+
+Comprend notamment :
+
+- `Entity` ;
+- `World` ;
+- `Tick` ;
+- `Value` ;
+- `State` ;
+- `Relation` ;
+- `Lifecycle`.
+
+---
+
+## Ajout — Entity / Components
+
+Introduction de la composition des Entities à partir de Components.
+
+Le modèle repose sur :
+
+```text
+Entity
++
+Components
++
+Systems
+```
+
+plutôt que sur des objets métier fortement couplés.
+
+---
+
+## Ajout — Tick
+
+Introduction du temps discret de simulation.
+
+---
+
+## Ajout — Lifecycle
+
+Introduction du suivi de l'évolution d'état des Entities.
+
+---
+
+## Ajout — DeterministicRandom
+
+Introduction d'un générateur aléatoire déterministe basé sur une seed.
+
+Objectif :
+
+```text
+même seed
++
+mêmes opérations
+=
+mêmes résultats
+```
+
+---
+
+## Ajout — World.Events
+
+Création du journal d'événements observable du World.
+
+Le journal n'est pas conçu comme un EventBus Publish/Subscribe.
+
+---
+
+## Ajout — Persistence
+
+Ajout des premières capacités de sauvegarde et de restauration du World.
+
+---
+
+## Ajout — Tests fondamentaux
+
+Tests initiaux sur :
+
+- Entity ;
+- Components ;
+- Tick ;
+- Lifecycle ;
+- RNG ;
+- événements ;
+- sérialisation ;
+- restauration.
+
+---
+
+# Convention de validation
+
+Une entrée de ce CHANGELOG correspondant à une fonctionnalité implémentée doit idéalement avoir parcouru :
+
+```text
+Spécification
+↓
+Implémentation
+↓
+Build
+↓
+Tests
+↓
+Validation
+```
+
+État courant du moteur :
+
+```text
+dotnet build
+✅ succès
+
+dotnet test
+✅ 122 / 122
+```
+
+---
+
+# Références documentaires
+
+Les règles décrites dans ce CHANGELOG ne remplacent jamais les documents du dépôt `CHRONIQUES`.
+
+Les principales autorités correspondantes sont actuellement :
+
+```text
+ENGINE-000
+→ principes d'architecture
+
+ENGINE-001
+→ journal d'événements du World
+
+ENGINE-002
+→ Kernel
+
+ENGINE-003
+→ Scheduler et boucle de simulation
+
+ENGINE-004
+→ Systems
+
+ENGINE-005
+→ Persistence / Serialization
+
+ENGINE-006
+→ Action Pipeline
+
+ENGINE-008
+→ Relations / Compétences / Héritage
+```
+
+En cas de divergence :
+
+```text
+document d'autorité validé
+>
+CHANGELOG
+```
+
+Le CHANGELOG décrit l'histoire de l'implémentation ; il n'introduit pas de nouvelle règle métier.
