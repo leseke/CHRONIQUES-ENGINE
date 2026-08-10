@@ -3,6 +3,11 @@ namespace Chroniques.Simulation.Systems;
 using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 
+// Désambiguïsation explicite entre :
+// - Kernel.Relation : primitive CORE-006
+// - Components.Relation : relation sociale GDB-004C
+using SocialRelation = Chroniques.Simulation.Components.Relation;
+
 /// <summary>
 /// Fait évoluer <see cref="RelationComponent"/> à chaque Tick, conformément
 /// à GDB-004C (Les Relations Sociales). Toute la logique vit ici, jamais
@@ -56,7 +61,7 @@ public sealed class RelationSystem : ISystem
             if (!entity.TryGet<RelationComponent>(out var rc))
                 continue;
 
-            var aRetirer = new List<Relation>();
+            var aRetirer = new List<SocialRelation>();
 
             foreach (var relation in rc.Relations)
             {
@@ -64,14 +69,20 @@ public sealed class RelationSystem : ISystem
                     ? _plancherFamilial
                     : 0.0;
 
-                relation.Force = Math.Max(plancher, relation.Force - _erosionParTick);
+                relation.Force = Math.Max(
+                    plancher,
+                    relation.Force - _erosionParTick);
 
                 if (relation.Force <= 0)
+                {
                     aRetirer.Add(relation);
+                }
             }
 
-            foreach (var r in aRetirer)
-                rc.Retirer(r);
+            foreach (var relation in aRetirer)
+            {
+                rc.Retirer(relation);
+            }
         }
     }
 
@@ -99,25 +110,43 @@ public sealed class RelationSystem : ISystem
         if (!entitySource.TryGet<RelationComponent>(out var rc))
             return;
 
-        var relation = rc.Relations.FirstOrDefault(r => r.Cible == cible && r.Type == type);
+        var relation = rc.Relations.FirstOrDefault(
+            r => r.Cible == cible && r.Type == type);
 
         if (relation is null)
         {
-            relation = new Relation(cible, type, _forceInitiale, tick);
+            relation = new SocialRelation(
+                cible,
+                type,
+                _forceInitiale,
+                tick);
+
             rc.Ajouter(relation);
         }
 
-        relation.Force = Math.Clamp(relation.Force + impact, 0, 100);
+        relation.Force = Math.Clamp(
+            relation.Force + impact,
+            0,
+            100);
 
         if (Math.Abs(impact) >= _seuilImportanceEpisode)
         {
-            var episode = new Episode(tick, description, impact);
-            relation.AjouterEpisode(episode, _capaciteEpisodes);
+            var episode = new Episode(
+                tick,
+                description,
+                impact);
+
+            relation.AjouterEpisode(
+                episode,
+                _capaciteEpisodes);
         }
 
-        // Suppression si Force atteint 0 après interaction négative
-        // (pas de protection absolue, même pour le type Familial --- ENGINE-008 v1.3)
+        // ENGINE-008 v1.3 :
+        // le plancher familial protège uniquement contre l'érosion naturelle.
+        // Une interaction négative peut rompre totalement la relation.
         if (relation.Force <= 0)
+        {
             rc.Retirer(relation);
+        }
     }
 }
