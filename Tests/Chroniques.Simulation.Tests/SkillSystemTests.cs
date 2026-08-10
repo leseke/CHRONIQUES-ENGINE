@@ -1,4 +1,5 @@
 namespace Chroniques.Simulation.Tests;
+
 using Xunit;
 using Chroniques.Simulation.Actions;
 using Chroniques.Simulation.Components;
@@ -28,93 +29,201 @@ public sealed class SkillSystemTests
         var world = CréerWorld();
         var system = CréerSystem(facteurGain: 10.0);
         var entity = world.Spawn();
+
         entity.Set(new SkillComponent());
 
-        system.Pratiquer(world, Tick.Zero, entity.Id, "cuisine");
+        system.Pratiquer(
+            world,
+            Tick.Zero,
+            entity.Id,
+            "cuisine");
 
         entity.TryGet<SkillComponent>(out var sc);
-        Assert.Equal(10.0, sc.Competences["cuisine"].Niveau, precision: 5);
+
+        Assert.Equal(
+            10.0,
+            sc.Competences["cuisine"].Niveau,
+            precision: 5);
     }
 
     [Fact]
-    public void Pratiquer_GainDecroissant_AVecLeNiveau()
+    public void Pratiquer_GainDecroissant_AvecLeNiveau()
     {
         var world = CréerWorld();
         var system = CréerSystem(facteurGain: 10.0);
         var entity = world.Spawn();
+
         entity.Set(new SkillComponent());
 
-        // Premier gain depuis 0
-        system.Pratiquer(world, Tick.Zero, entity.Id, "cuisine");
+        // Premier gain depuis le niveau 0.
+        system.Pratiquer(
+            world,
+            Tick.Zero,
+            entity.Id,
+            "cuisine");
+
         entity.TryGet<SkillComponent>(out var sc);
-        var gain1 = sc.Competences["cuisine"].Niveau;
 
-        // Second gain depuis ~10
-        system.Pratiquer(world, Tick.Zero, entity.Id, "cuisine");
-        var gain2 = sc.Competences["cuisine"].Niveau - gain1;
+        var niveauApresPremierePratique =
+            sc.Competences["cuisine"].Niveau;
 
-        Assert.True(gain2 < gain1,
+        var gain1 = niveauApresPremierePratique;
+
+        // Deuxième pratique depuis un niveau supérieur à 0.
+        system.Pratiquer(
+            world,
+            Tick.Zero,
+            entity.Id,
+            "cuisine");
+
+        var niveauApresDeuxiemePratique =
+            sc.Competences["cuisine"].Niveau;
+
+        var gain2 =
+            niveauApresDeuxiemePratique -
+            niveauApresPremierePratique;
+
+        Assert.True(
+            gain2 < gain1,
             "Le gain doit être strictement décroissant avec le Niveau.");
     }
 
     [Fact]
-    public void Pratiquer_GainNul_QuandNiveauEst100()
+    public void Pratiquer_GainDevientNul_EnApprochantNiveau100()
     {
         var world = CréerWorld();
         var system = CréerSystem(facteurGain: 10.0);
         var entity = world.Spawn();
+
         entity.Set(new SkillComponent());
+
+        /*
+         * On n'accède volontairement pas à SkillComponent.ObtenirOuCreer(),
+         * qui est une méthode interne.
+         *
+         * Le niveau est amené naturellement vers 100 uniquement en utilisant
+         * l'API publique SkillSystem.Pratiquer().
+         */
+        for (var i = 0; i < 1000; i++)
+        {
+            system.Pratiquer(
+                world,
+                Tick.Zero,
+                entity.Id,
+                "cuisine");
+        }
+
         entity.TryGet<SkillComponent>(out var sc);
 
-        // Forcer le niveau à 100 directement
-        var comp = sc.ObtenirOuCreer("cuisine", Tick.Zero);
-        comp.Niveau = 100;
+        var niveauAvant =
+            sc.Competences["cuisine"].Niveau;
 
-        system.Pratiquer(world, Tick.Zero, entity.Id, "cuisine");
+        Assert.Equal(
+            100.0,
+            niveauAvant,
+            precision: 5);
 
-        Assert.Equal(100.0, sc.Competences["cuisine"].Niveau, precision: 5);
+        // Une pratique supplémentaire ne doit plus produire
+        // d'augmentation significative.
+        system.Pratiquer(
+            world,
+            Tick.Zero,
+            entity.Id,
+            "cuisine");
+
+        var niveauApres =
+            sc.Competences["cuisine"].Niveau;
+
+        Assert.Equal(
+            niveauAvant,
+            niveauApres,
+            precision: 10);
+
+        Assert.InRange(
+            niveauApres,
+            0.0,
+            100.0);
     }
 
-    // ── Déclin par inactivité ─────────────────────────────────────────────────
+    // ── Déclin par inactivité ────────────────────────────────────────────────
 
     [Fact]
-    public void Update_PasDeDéclin_AvantLeSeuilDinactivite()
+    public void Update_PasDeDeclin_AvantLeSeuilDinactivite()
     {
         var world = CréerWorld();
-        var system = CréerSystem(seuilInactivite: 10, declin: 1.0);
+        var system = CréerSystem(
+            seuilInactivite: 10,
+            declin: 1.0);
+
         var entity = world.Spawn();
+
         entity.Set(new SkillComponent());
 
-        system.Pratiquer(world, Tick.Zero, entity.Id, "cuisine");
-        entity.TryGet<SkillComponent>(out var sc);
-        var niveauApratique = sc.Competences["cuisine"].Niveau;
+        system.Pratiquer(
+            world,
+            Tick.Zero,
+            entity.Id,
+            "cuisine");
 
-        // 5 Ticks inactif, seuil est 10 : pas de déclin
+        entity.TryGet<SkillComponent>(out var sc);
+
+        var niveauApresPratique =
+            sc.Competences["cuisine"].Niveau;
+
+        // 5 Ticks inactifs, seuil = 10 :
+        // aucun déclin ne doit être appliqué.
         var tick5 = Tick.Zero;
-        for (var i = 0; i < 5; i++) tick5 = tick5.Next();
+
+        for (var i = 0; i < 5; i++)
+        {
+            tick5 = tick5.Next();
+        }
+
         system.Update(world, tick5);
 
-        Assert.Equal(niveauApratique, sc.Competences["cuisine"].Niveau, precision: 5);
+        Assert.Equal(
+            niveauApresPratique,
+            sc.Competences["cuisine"].Niveau,
+            precision: 5);
     }
 
     [Fact]
-    public void Update_DeclinAppliqué_ApresLeSeuilDinactivite()
+    public void Update_DeclinApplique_ApresLeSeuilDinactivite()
     {
         var world = CréerWorld();
-        var system = CréerSystem(seuilInactivite: 3, declin: 1.0);
+        var system = CréerSystem(
+            seuilInactivite: 3,
+            declin: 1.0);
+
         var entity = world.Spawn();
+
         entity.Set(new SkillComponent());
 
-        system.Pratiquer(world, Tick.Zero, entity.Id, "cuisine");
-        entity.TryGet<SkillComponent>(out var sc);
-        var niveauApratique = sc.Competences["cuisine"].Niveau;
+        system.Pratiquer(
+            world,
+            Tick.Zero,
+            entity.Id,
+            "cuisine");
 
-        // 5 Ticks inactif, seuil est 3 : déclin
+        entity.TryGet<SkillComponent>(out var sc);
+
+        var niveauApresPratique =
+            sc.Competences["cuisine"].Niveau;
+
+        // 5 Ticks inactifs, seuil = 3 :
+        // le déclin doit être appliqué.
         var tick5 = Tick.Zero;
-        for (var i = 0; i < 5; i++) tick5 = tick5.Next();
+
+        for (var i = 0; i < 5; i++)
+        {
+            tick5 = tick5.Next();
+        }
+
         system.Update(world, tick5);
 
-        Assert.True(sc.Competences["cuisine"].Niveau < niveauApratique);
+        Assert.True(
+            sc.Competences["cuisine"].Niveau <
+            niveauApresPratique);
     }
 
     // ── EffectApplicator ─────────────────────────────────────────────────────
@@ -123,17 +232,38 @@ public sealed class SkillSystemTests
     public void PopulationEffectApplicator_TraiteSkillPracticeEffect()
     {
         var world = CréerWorld();
-        var relSystem = new RelationSystem();
-        var skillSystem = CréerSystem();
-        var applicator = new PopulationEffectApplicator(relSystem, skillSystem);
+
+        var relationSystem =
+            new RelationSystem();
+
+        var skillSystem =
+            CréerSystem();
+
+        var applicator =
+            new PopulationEffectApplicator(
+                relationSystem,
+                skillSystem);
+
         var entity = world.Spawn();
+
         entity.Set(new SkillComponent());
 
-        var effect = new SkillPracticeEffect(entity.Id, "sculpture");
-        applicator.Appliquer(effect, world, Tick.Zero);
+        var effect =
+            new SkillPracticeEffect(
+                entity.Id,
+                "sculpture");
+
+        applicator.Appliquer(
+            effect,
+            world,
+            Tick.Zero);
 
         entity.TryGet<SkillComponent>(out var sc);
-        Assert.True(sc.Competences.ContainsKey("sculpture"));
-        Assert.True(sc.Competences["sculpture"].Niveau > 0);
+
+        Assert.True(
+            sc.Competences.ContainsKey("sculpture"));
+
+        Assert.True(
+            sc.Competences["sculpture"].Niveau > 0);
     }
 }
