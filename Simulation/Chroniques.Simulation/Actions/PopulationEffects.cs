@@ -4,20 +4,22 @@ using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 using Chroniques.Simulation.Systems;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Effects typés (ENGINE-008, section 5.1)
+// ─────────────────────────────────────────────────────────────────────────────
+// Effects typés — ENGINE-008, section 5.1
 //
-// Le pipeline d'Actions (ENGINE-006) produit des Effects (données). Il ne
-// connaît jamais les Systems concrets d'ENGINE-008. Le résolveur ci-dessous
-// dispatche chaque Effect typé vers le System responsable.
+// Le pipeline d'Actions produit des Effects (données).
 //
-// Ajouter un nouveau type d'Effect ne modifie pas ENGINE-006.
-// ──────────────────────────────────────────────────────────────────────────────
+// Il ne connaît jamais :
+// - RelationSystem ;
+// - SkillSystem ;
+// - HeritageSystem.
+//
+// PopulationEffectApplicator assure uniquement le dispatch.
+// La logique métier reste exclusivement dans le System responsable.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Déclenche <see cref="RelationSystem.EnregistrerInteraction"/> pour une
-/// paire d'habitants. Produit par le pipeline d'Actions quand une Action
-/// affecte une relation (ex. « Se lier d'amitié »).
+/// Effect représentant une interaction sociale entre deux habitants.
 /// </summary>
 public sealed record RelationInteractionEffect(
     EntityId Source,
@@ -27,80 +29,137 @@ public sealed record RelationInteractionEffect(
     string Description) : IEffect;
 
 /// <summary>
-/// Déclenche <see cref="SkillSystem.Pratiquer"/> pour un habitant. Produit
-/// par le pipeline d'Actions quand une Action entraîne la pratique d'une
-/// compétence (ex. « Travailler »).
+/// Effect représentant la pratique d'une compétence.
 /// </summary>
 public sealed record SkillPracticeEffect(
     EntityId EntityId,
     string NomCompetence) : IEffect;
 
 /// <summary>
-/// Déclenche le refus d'un héritage par un héritier désigné. Produit par le
-/// pipeline d'Actions quand l'héritier choisit de refuser (ENGINE-008 v1.3,
-/// cas limite verrouillé --- en Phase 1, déclenché manuellement par le
-/// joueur si son personnage est l'héritier désigné).
+/// Effect représentant le refus d'un héritage par un héritier.
+///
+/// Le résolveur ne traite pas lui-même le refus.
+/// Il transmet cet Effect à HeritageSystem, qui constitue l'unique
+/// source de vérité pour la logique d'héritage.
 /// </summary>
 public sealed record HeritageRefusalEffect(
     EntityId Heritier,
     EntityId Defunt) : IEffect;
 
 /// <summary>
-/// Marqueur commun des Effects de population introduits par ENGINE-008.
+/// Contrat commun des Effects de population introduits par ENGINE-008.
 /// </summary>
-public interface IEffect { }
+public interface IEffect
+{
+}
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Résolveur (EffectApplicator)
-//
-// Dispatche les Effects typés vers les Systems responsables.
-// Les Systems sont injectés à la construction --- aucun couplage statique.
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PopulationEffectApplicator
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// Résout les Effects produits par le pipeline d'Actions (ENGINE-006) en
-/// mutations concrètes du World, via les Systems appropriés (ENGINE-008,
-/// section 5.1).
+/// Résout les Effects de population produits par le pipeline d'Actions.
 ///
-/// Garantit qu'ENGINE-006 ne connaît aucun System concret d'ENGINE-008 :
-/// il produit des Effects (données), ce résolveur sait qui les traite.
+/// Responsabilité unique :
+///
+///     Effect
+///       ↓
+///     identifier le System responsable
+///       ↓
+///     lui transmettre les données
+///
+/// Il ne contient aucune logique métier propre aux relations,
+/// compétences ou héritages.
 /// </summary>
 public sealed class PopulationEffectApplicator
 {
     private readonly RelationSystem _relationSystem;
     private readonly SkillSystem _skillSystem;
+    private readonly HeritageSystem _heritageSystem;
 
+    /// <summary>
+    /// Constructeur complet recommandé.
+    ///
+    /// Les trois Systems sont explicitement injectés.
+    /// </summary>
+    public PopulationEffectApplicator(
+        RelationSystem relationSystem,
+        SkillSystem skillSystem,
+        HeritageSystem heritageSystem)
+    {
+        ArgumentNullException.ThrowIfNull(relationSystem);
+        ArgumentNullException.ThrowIfNull(skillSystem);
+        ArgumentNullException.ThrowIfNull(heritageSystem);
+
+        _relationSystem = relationSystem;
+        _skillSystem = skillSystem;
+        _heritageSystem = heritageSystem;
+    }
+
+    /// <summary>
+    /// Constructeur de compatibilité avec les appels existants.
+    ///
+    /// Il permet aux tests et usages ne manipulant pas encore l'héritage
+    /// de continuer à construire l'applicator avec RelationSystem et
+    /// SkillSystem uniquement.
+    ///
+    /// Les nouveaux usages impliquant l'héritage doivent préférer
+    /// le constructeur à trois arguments.
+    /// </summary>
     public PopulationEffectApplicator(
         RelationSystem relationSystem,
         SkillSystem skillSystem)
+        : this(
+            relationSystem,
+            skillSystem,
+            new HeritageSystem())
     {
-        _relationSystem = relationSystem;
-        _skillSystem = skillSystem;
     }
 
-    public void Appliquer(IEffect effect, World world, Tick tick)
+    /// <summary>
+    /// Applique un Effect en le dispatchant vers le System responsable.
+    /// </summary>
+    public void Appliquer(
+        IEffect effect,
+        World world,
+        Tick tick)
     {
+        ArgumentNullException.ThrowIfNull(effect);
+        ArgumentNullException.ThrowIfNull(world);
+
         switch (effect)
         {
-            case RelationInteractionEffect e:
+            case RelationInteractionEffect relationEffect:
+
                 _relationSystem.EnregistrerInteraction(
-                    world, tick,
-                    e.Source, e.Cible, e.Type,
-                    e.Impact, e.Description);
-                break;
-
-            case SkillPracticeEffect e:
-                _skillSystem.Pratiquer(world, tick, e.EntityId, e.NomCompetence);
-                break;
-
-            case HeritageRefusalEffect e:
-                // Le refus produit le même chemin que l'absence de successeur
-                // pour la part refusée (GDB-004J, CAS D'ÉCHEC, Refus du successeur).
-                world.Publish(GameEvent.Create(
+                    world,
                     tick,
-                    "heritage.refus",
-                    source: e.Heritier,
-                    target: e.Defunt));
+                    relationEffect.Source,
+                    relationEffect.Cible,
+                    relationEffect.Type,
+                    relationEffect.Impact,
+                    relationEffect.Description);
+
+                break;
+
+            case SkillPracticeEffect skillEffect:
+
+                _skillSystem.Pratiquer(
+                    world,
+                    tick,
+                    skillEffect.EntityId,
+                    skillEffect.NomCompetence);
+
+                break;
+
+            case HeritageRefusalEffect heritageEffect:
+
+                _heritageSystem.RefuserHeritage(
+                    world,
+                    tick,
+                    heritageEffect.Heritier,
+                    heritageEffect.Defunt);
+
                 break;
         }
     }
