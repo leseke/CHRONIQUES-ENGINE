@@ -4,33 +4,32 @@ using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 
 /// <summary>
-/// Implémente GDB-004J (La Transmission) : déclenche la transmission au
-/// moment où une Entity passe à l'état « mort » (ENGINE-008, section 3).
+/// Implémente GDB-004J (La Transmission).
 ///
-/// Détecte la mort en inspectant directement le <see cref="Lifecycle"/>
-/// de chaque Entity --- jamais en lisant <see cref="World.Events"/> comme
-/// canal de coordination (ENGINE-001 reste un journal d'observabilité,
-/// ENGINE-008 section 7, invariant).
+/// Responsabilités :
+///   - détecter la mort d'une Entity par inspection directe du Lifecycle ;
+///   - désigner l'héritier selon l'algorithme déterministe de GDB-004J ;
+///   - garantir qu'une Entity morte n'est traitée qu'une seule fois ;
+///   - traiter les cas d'échec relevant de l'héritage ;
+///   - constituer l'unique source de vérité pour la logique d'héritage.
 ///
-/// Doit être enregistré après <see cref="AgingSystem"/> dans le Scheduler
-/// (ENGINE-008, section 5) : condition nécessaire pour que le Lifecycle
-/// d'une Entity décédée ce même Tick soit déjà à l'état « mort » quand
-/// Update s'exécute.
+/// World.Events reste uniquement un journal d'observabilité :
+/// HeritageSystem ne lit jamais les événements du World pour décider d'agir.
 ///
-/// Invariants (ENGINE-008, section 6 et v1.3) :
-///   - Une Entity déjà traitée n'est jamais retraitée (HashSet de garde).
-///   - L'un des trois cas d'échec de GDB-004J s'applique systématiquement
-///     quand la désignation ou la transmission n'aboutit pas normalement ---
-///     jamais de sortie silencieuse.
-///   - HeritageSystem ne modifie jamais RelationComponent directement ---
-///     il le lit pour désigner l'héritier.
+/// HeritageSystem doit être enregistré après AgingSystem dans le Scheduler
+/// afin qu'une Entity décédée pendant le Tick soit déjà dans l'état "mort"
+/// lorsque Update est exécuté.
 /// </summary>
 public sealed class HeritageSystem : ISystem
 {
     private const string EtatMort = "mort";
 
-    private readonly HashSet<EntityId> _dejaTrait = new();
+    private readonly HashSet<EntityId> _dejaTraitees = new();
 
+    /// <summary>
+    /// Inspecte le Lifecycle des Entities et déclenche une transmission
+    /// pour toute Entity morte qui n'a pas encore été traitée.
+    /// </summary>
     public void Update(World world, Tick currentTick)
     {
         foreach (var entity in world.Entities)
@@ -38,63 +37,143 @@ public sealed class HeritageSystem : ISystem
             if (entity.Lifecycle.CurrentState.Name != EtatMort)
                 continue;
 
-            if (_dejaTrait.Contains(entity.Id))
+            if (_dejaTraitees.Contains(entity.Id))
                 continue;
 
-            _dejaTrait.Add(entity.Id);
-            TraiterTransmission(world, entity, currentTick);
+            _dejaTraitees.Add(entity.Id);
+
+            TraiterTransmission(
+                world,
+                entity,
+                currentTick);
         }
     }
 
-    private void TraiterTransmission(World world, Entity defunt, Tick tick)
+    /// <summary>
+    /// Traite explicitement le refus d'un héritage.
+    ///
+    /// Cette méthode constitue l'unique point d'entrée métier du refus
+    /// d'héritage. PopulationEffectApplicator ne contient aucune logique
+    /// d'héritage : il se contente de dispatcher HeritageRefusalEffect ici.
+    ///
+    /// En Phase 1, aucun patrimoine matériel n'étant encore représenté,
+    /// le traitement concret consiste à produire l'événement observable
+    /// "heritage.refus".
+    ///
+    /// La redistribution éventuelle de la part refusée sera ajoutée lorsque
+    /// le patrimoine disposera d'une représentation conforme à GDB-004J.
+    /// </summary>
+    public void RefuserHeritage(
+        World world,
+        Tick tick,
+        EntityId heritier,
+        EntityId defunt)
     {
-        var heritier = DesignerHeritier(world, defunt);
+        // Si l'une des deux Entities n'existe pas, aucune mutation ni
+        // publication ne doit avoir lieu.
+        if (!world.TryGetEntity(heritier, out _))
+            return;
+
+        if (!world.TryGetEntity(defunt, out _))
+            return;
+
+        world.Publish(
+            GameEvent.Create(
+                tick,
+                "heritage.refus",
+                source: heritier,
+                target: defunt));
+    }
+
+    /// <summary>
+    /// Traite la transmission initiale après le décès.
+    /// </summary>
+    private void TraiterTransmission(
+        World world,
+        Entity defunt,
+        Tick tick)
+    {
+        var heritier =
+            DesignerHeritier(
+                world,
+                defunt);
 
         if (heritier is null)
         {
-            // Cas d'échec 1 : absence de successeur (GDB-004J)
-            world.Publish(GameEvent.Create(
-                tick,
-                "heritage.absence-successeur",
-                source: defunt.Id));
+            // Cas d'échec 1 :
+            // absence de successeur (GDB-004J).
+            world.Publish(
+                GameEvent.Create(
+                    tick,
+                    "heritage.absence-successeur",
+                    source: defunt.Id));
+
             return;
         }
 
-        // En Phase 1 : le refus est déclenché manuellement par le joueur.
-        // En Phase 3 : il sera déclenché par un HeritageRefusalEffect
-        // produit par un Intent de l'héritier via le pipeline (ENGINE-008 v1.3).
-        // Ici, on publie simplement l'événement de transmission réussie.
-        world.Publish(GameEvent.Create(
-            tick,
-            "heritage.transmission",
-            source: defunt.Id,
-            target: heritier.Id));
+        /*
+         * Phase 1 :
+         *
+         * Le patrimoine matériel n'est pas encore représenté.
+         * La transmission est donc actuellement matérialisée par
+         * un événement observable.
+         *
+         * Un éventuel refus ultérieur passe exclusivement par
+         * RefuserHeritage(), appelé via HeritageRefusalEffect.
+         */
+        world.Publish(
+            GameEvent.Create(
+                tick,
+                "heritage.transmission",
+                source: defunt.Id,
+                target: heritier.Id));
     }
 
     /// <summary>
     /// Désigne l'héritier selon l'algorithme déterministe de GDB-004J :
-    ///   1. Priorité aux relations Familiales (Force la plus élevée).
-    ///   2. En cas d'égalité de Force : relation créée au Tick le plus bas.
-    ///   3. Si aucune relation Familiale : même règle sur toutes les relations.
-    ///   4. Si aucune relation : null (absence de successeur).
+    ///
+    /// 1. priorité aux relations Familiales ;
+    /// 2. Force la plus élevée ;
+    /// 3. en cas d'égalité, relation la plus ancienne ;
+    /// 4. si aucune relation Familiale, même règle sur les autres relations ;
+    /// 5. si aucune relation exploitable, absence de successeur.
     /// </summary>
-    private static Entity? DesignerHeritier(World world, Entity defunt)
+    private static Entity? DesignerHeritier(
+        World world,
+        Entity defunt)
     {
-        if (!defunt.TryGet<RelationComponent>(out var rc) || rc.Relations.Count == 0)
+        if (!defunt.TryGet<RelationComponent>(out var relationComponent))
             return null;
 
-        var candidates = rc.Relations
-            .Where(r => r.Type == TypeRelation.Familiale)
-            .ToList();
+        if (relationComponent.Relations.Count == 0)
+            return null;
 
-        if (candidates.Count == 0)
-            candidates = rc.Relations.ToList();
+        var candidatsFamiliaux =
+            relationComponent.Relations
+                .Where(
+                    relation =>
+                        relation.Type == TypeRelation.Familiale)
+                .ToList();
 
-        var meilleure = candidates
-            .OrderByDescending(r => r.Force)
-            .ThenBy(r => r.CreeeAu.Value)
-            .First();
+        var candidats =
+            candidatsFamiliaux.Count > 0
+                ? candidatsFamiliaux
+                : relationComponent.Relations.ToList();
 
-        return world.TryGetEntity(meilleure.Cible, out var heritier) ? heritier : null;
+        var meilleureRelation =
+            candidats
+                .OrderByDescending(
+                    relation =>
+                        relation.Force)
+                .ThenBy(
+                    relation =>
+                        relation.CreeeAu.Value)
+                .First();
+
+        return world.TryGetEntity(
+            meilleureRelation.Cible,
+            out var heritier)
+                ? heritier
+                : null;
     }
 }
