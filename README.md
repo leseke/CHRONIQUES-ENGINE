@@ -1,146 +1,847 @@
-# Chroniques --- Moteur
+# CHRONIQUES-ENGINE
 
-> *Chaque vie raconte une Chronique.*
-
-Ce dépôt contient le **code** du moteur de Chroniques. Il est distinct du
-dépôt de **documentation** (`chroniques--main`), qui reste l'unique source
-de vérité pour la conception : vision, principes, spécifications GDB et ACT,
-architecture, ADR.
-
-Toute divergence entre ce code et la documentation ouvre un constat, selon
-la règle de divergence de MASTER-004 : soit la conception était fausse et le
-document est corrigé, soit l'implémentation s'est écartée et c'est le code
-qui est corrigé --- jamais un arbitrage silencieux.
+> Moteur de simulation déterministe du projet **Chroniques**  
+> État courant : **v0.3 — Population minimale en cours de construction**  
+> Build : ✅  
+> Tests : **122 / 122 réussis**
 
 ---
 
-## Où trouver quoi
+# 1. Présentation
 
-| Question | Réponse |
-|---|---|
-| Pourquoi ce projet existe | `chroniques--main/MASTER/MASTER-001.md` |
-| Quelles sont les primitives du Kernel | `chroniques--main/CORE/CORE-000` à `CORE-010` |
-| Quel est le pipeline d'une action | `chroniques--main/ACT/ACT-002` |
-| Quel langage, quel moteur de rendu, pourquoi | `chroniques--main/ADR/ADR-002.md` |
-| Dans quel ordre construire | `chroniques--main/MASTER/MASTER-005.md` et `PROD/FeuilleDeRoute.md` |
+`CHRONIQUES-ENGINE` contient l'implémentation exécutable du moteur de simulation de Chroniques.
 
----
+Le dépôt n'est pas l'autorité métier du projet.
 
-## Structure
+Les règles et contrats sont définis en amont dans le dépôt documentaire `CHRONIQUES`, notamment par :
 
-```
-Chroniques-Engine/
-├── Simulation/     C# pur, aucune dépendance graphique (ADR-002)
-├── Content/        données externes, aucune donnée codée en dur
-├── Rendering/      adaptateur Godot --- lit l'état, l'affiche
-├── Tools/          éditeur, débogueur
-├── Documentation/  documents TECH, écrits uniquement à partir du code existant
-└── Tests/          un test par loi du Kernel (MASTER-005, critère de sortie v0.1)
+```text
+MASTER
+↓
+CORE
+↓
+GDB
+↓
+ACT
+↓
+ENGINE
+↓
+CHRONIQUES-ENGINE
+↓
+Tests
+↓
+TECH
 ```
 
-Cette structure reprend exactement celle décrite par `PROD/FeuilleDeRoute.md`.
-`Content/`, `Rendering/`, `Tools/` et `Documentation/` sont volontairement
-vides à ce stade : ils ne seront remplis qu'au moment où une phase réelle de
-MASTER-005 l'exigera, jamais par anticipation (MASTER-006).
+Le moteur traduit ces spécifications en code C# déterministe, testable et indépendant du rendu.
 
 ---
 
-## État actuel --- v0.2, Un être vivant (cycle de vie ajouté, à valider)
+# 2. Principes
 
-Critère de sortie v0.1 (atteint et vérifié) : *« le noyau tourne, tous les
-tests de lois passent, un World vide se sauvegarde et se recharge à
-l'identique. »*
+Le moteur respecte plusieurs principes fondamentaux.
 
-Critère de sortie v0.2 (MASTER-005) : *« un personnage naît, vit ses
-besoins année après année, et meurt. Tout est observable sans aucun
-rendu. »*
+## Déterminisme
 
-Implémenté :
+À :
 
-- les neuf primitives du Kernel (`Simulation/Chroniques.Simulation/Kernel/`) :
-  `Entity`, `IComponent`, `Value<T>`, `State`, `Relation`, `GameEvent`,
-  `Tick` (Time), `SpaceRef` (Space), `Lifecycle` ;
-- un `World` déterministe (`DeterministicRandom` à graine) ;
-- `Entity` ↔ `Lifecycle`, désormais reliés dès la création (CORE-002-H :
-  « une Entity possède un Lifecycle ») --- écart comblé en v0.2, la
-  primitive existait depuis v0.1 sans qu'aucune Entity n'y soit rattachée ;
-- `Components/NeedsComponent.cs` --- premier Component métier (GDB-004B) :
-  faim, fatigue, santé, moral ;
-- `Components/AgeComponent.cs` --- second Component métier (GDB-008C) :
-  l'âge en années simulées ;
-- `Systems/` --- `ISystem`, `Scheduler` (Tick + invocation ordonnée des
-  Systems), `NeedsDecaySystem` (déclin des besoins par Tick),
-  `AgingSystem` (cycle de vie complet : enfance → adolescence → âge
-  adulte → maturité → vieillesse → mort, avec Event `vie.mort` publié sur
-  le World à la mort), `CalendrierSimule` (traduction Tick → saison/année,
-  source unique de vérité pour ce calcul --- réutilisable par tout futur
-  System ayant besoin de savoir quelle saison il traverse, ex. économie,
-  besoins saisonniers) ;
-- `Persistence/` --- sauvegarde/rechargement JSON, capable de sérialiser
-  `NeedsComponent`, `AgeComponent`, et l'état courant du `Lifecycle`
-  (approche explicite, pas encore générique --- voir le commentaire XML de
-  `WorldSnapshot.cs`) ;
-- un test par invariant du Kernel, par règle de `NeedsDecaySystem`/
-  `Scheduler`/`AgingSystem`/`CalendrierSimule`, et par cas de rechargement
-  (`Tests/Chroniques.Simulation.Tests/`).
+```text
+World identique
++
+Seed identique
++
+Entrées identiques
++
+Ordre de Systems identique
+```
 
-**Modèle de temps désormais tranché**, porté par `CalendrierSimule`
-(décision d'équipe, à formaliser par un ADR avant la v0.3, GDB-008A ne
-fixant aucune conversion Tick → calendrier) : **un Tick = un mois
-simulé**, 3 mois par saison, 4 saisons par an --- exactement la structure
-du calendrier réel, pas une invention propre à Chroniques. Un habitant
-vieillit donc d'un an tous les 12 Ticks (`AgingSystem`), et n'importe quel
-autre System peut demander `CalendrierSimule.SaisonAu(tick)` pour savoir
-quelle saison il traverse. Les semaines ne sont volontairement pas
-représentées à ce niveau de granularité (voir le commentaire XML de
-`CalendrierSimule` pour la justification).
+le moteur doit produire :
 
-**Une hypothèse de travail reste non tranchée par la documentation**,
-introduite par `AgingSystem` et documentée dans son commentaire XML --- à
-confirmer ou corriger par un ADR avant la v0.3 :
+```text
+Résultat identique
+```
 
-- Les seuils d'âge (adolescence, âge adulte, maturité, vieillesse) et
-  l'espérance de vie --- GDB-008C nomme les étapes de vie sans fixer les
-  âges de bascule ; aucun document ne fixe d'espérance de vie. Ces
-  valeurs sont des paramètres du constructeur d'`AgingSystem` (mêmes
-  valeurs par défaut que le code, à ne pas recopier ailleurs comme si
-  elles étaient officielles).
-
-Pas encore implémenté, volontairement --- appartient à v0.3 (MASTER-005) :
-
-- les actions du joueur (moteur ACT : Intent → Plan → Action → Outcome) ;
-- la transmission de lignée à la mort ;
-- la couche `Rendering/` (Godot) ;
-- l'historique complet du Lifecycle à travers la persistance (seul l'état
-  courant survit au rechargement pour l'instant --- voir le commentaire XML
-  d'`Entity.Restore`) ;
-- une sérialisation générique des Components (n'a de sens que lorsque leur
-  nombre rendra la liste explicite actuelle pénible à maintenir).
+Le hasard passe par les primitives déterministes du Kernel.
 
 ---
 
-## Compiler et tester
+## Séparation données / logique
+
+Les Components portent l'état.
+
+Les Systems portent la logique.
+
+```text
+Component
+=
+données
+
+System
+=
+transformation déterministe des données
+```
+
+Un Component ne doit pas devenir un objet métier autonome contenant sa propre logique de simulation.
+
+---
+
+## Documentation First
+
+Lorsqu'une nouvelle infrastructure ou règle structurante est requise :
+
+```text
+Spécification
+↓
+Validation
+↓
+Implémentation
+↓
+Tests
+↓
+Documentation TECH
+```
+
+Le code ne doit pas inventer silencieusement des règles absentes des documents d'autorité.
+
+---
+
+## Aucun couplage au rendu
+
+Le moteur ne dépend pas :
+
+- d'une interface graphique ;
+- d'un moteur 3D ;
+- d'une plateforme particulière ;
+- d'une technologie de présentation.
+
+Il doit pouvoir fonctionner sans rendu.
+
+---
+
+# 3. Solution
+
+```text
+Chroniques.sln
+│
+├── Simulation/
+│   └── Chroniques.Simulation/
+│
+└── Tests/
+    └── Chroniques.Simulation.Tests/
+```
+
+Le projet principal contient le moteur.
+
+Le projet Tests contient les tests unitaires et d'intégration du moteur.
+
+---
+
+# 4. Architecture actuelle
+
+L'architecture principale est organisée autour de plusieurs couches.
+
+```text
+Kernel
+│
+├── World
+├── Entity
+├── Component
+├── Tick
+├── State
+├── Value
+├── Relation
+├── Lifecycle
+├── GameEvent
+└── DeterministicRandom
+
+Components
+│
+├── AgeComponent
+├── NeedsComponent
+├── RelationComponent
+└── SkillComponent
+
+Systems
+│
+├── AgingSystem
+├── NeedsDecaySystem
+├── RelationSystem
+├── SkillSystem
+└── HeritageSystem
+
+Actions
+│
+├── Intent
+├── Planner
+├── Plan
+├── ActionDefinition
+├── ActionInstance
+├── Outcome
+├── Effects
+└── PopulationEffectApplicator
+
+Persistence
+│
+└── WorldRepository
+```
+
+L'arborescence exacte peut évoluer sans modifier les responsabilités décrites ci-dessus.
+
+---
+
+# 5. Kernel
+
+Le Kernel constitue la couche fondamentale du moteur.
+
+Il expose les primitives génériques nécessaires à la simulation.
+
+## World
+
+`World` constitue le conteneur principal de l'état simulé.
+
+Il gère notamment :
+
+- les Entities ;
+- le Tick ;
+- les événements observables ;
+- les primitives nécessaires à la simulation déterministe.
+
+---
+
+## Entity
+
+Une Entity représente une identité dans le World.
+
+Elle peut porter plusieurs Components.
+
+La logique métier ne vit pas directement dans l'Entity.
+
+---
+
+## Components
+
+Les Components représentent des fragments d'état.
+
+Exemples actuels :
+
+```text
+AgeComponent
+NeedsComponent
+RelationComponent
+SkillComponent
+```
+
+Une Entity ne possédant pas un Component donné peut simplement être ignorée par le System correspondant lorsque le contrat le prévoit.
+
+---
+
+## Lifecycle
+
+Le `Lifecycle` représente l'évolution d'état d'une Entity.
+
+Il est notamment utilisé pour détecter l'état :
+
+```text
+mort
+```
+
+par `HeritageSystem`.
+
+La mort n'est pas détectée par lecture de `World.Events`.
+
+---
+
+# 6. Temps et Scheduler
+
+Le moteur utilise un temps simulé discret basé sur `Tick`.
+
+Le Scheduler garantit un ordre déterministe d'exécution des Systems.
+
+Conceptuellement :
+
+```text
+Tick
+↓
+System 1
+↓
+System 2
+↓
+System 3
+↓
+...
+↓
+Tick suivant
+```
+
+L'ordre d'enregistrement des Systems constitue donc une partie du comportement déterministe de la simulation.
+
+---
+
+# 7. Systems fondamentaux
+
+## NeedsDecaySystem
+
+Fait évoluer les besoins au fil du temps.
+
+Il constitue l'une des premières briques de simulation autonome du moteur.
+
+---
+
+## AgingSystem
+
+Fait progresser l'âge des Entities concernées.
+
+Il peut également provoquer les transitions de Lifecycle liées à la fin de vie.
+
+---
+
+# 8. Action Pipeline
+
+Le moteur possède maintenant un premier pipeline d'Actions conforme aux contrats ACT et ENGINE-006.
+
+Le modèle conceptuel est :
+
+```text
+Intent
+↓
+Planner
+↓
+Plan
+↓
+Action Instance
+↓
+Execution Engine
+↓
+Outcome
+↓
+Effects
+↓
+World
+```
+
+## Intent
+
+Exprime ce qu'un acteur cherche à accomplir.
+
+Il ne décrit pas comment l'objectif sera réalisé.
+
+---
+
+## Planner
+
+Transforme un Intent en Plan lorsque les conditions nécessaires sont réunies.
+
+---
+
+## Plan
+
+Décrit une séquence d'Actions permettant de tenter d'atteindre l'Intent.
+
+---
+
+## Action Instance
+
+Représente l'exécution concrète d'une Action dans un contexte donné.
+
+---
+
+## Outcome
+
+Décrit le résultat d'une Action résolue.
+
+Le résultat peut ensuite produire des Effects.
+
+---
+
+# 9. Effects et résolution
+
+Le moteur commence à séparer explicitement :
+
+```text
+résolution d'une Action
+```
+
+de :
+
+```text
+mutation métier du World
+```
+
+Le flux utilisé par les Effects de population est :
+
+```text
+Action Instance
+↓
+Execution Engine
+↓
+Effects typés
+↓
+PopulationEffectApplicator
+↓
+System responsable
+↓
+World
+```
+
+Le pipeline ne dépend donc pas directement de :
+
+- `RelationSystem` ;
+- `SkillSystem` ;
+- `HeritageSystem`.
+
+`PopulationEffectApplicator` assure actuellement le dispatch spécialisé des Effects de population.
+
+---
+
+# 10. Population — ENGINE-008
+
+Le premier lot des Systems de population est maintenant implémenté.
+
+Il couvre :
+
+```text
+Relations
+Compétences
+Héritage minimal
+```
+
+La mémoire, la cognition et les autres couches psychologiques ne font pas encore partie de ce lot.
+
+---
+
+# 11. Relations sociales
+
+`RelationComponent` représente les relations actives d'une Entity.
+
+Une relation possède notamment :
+
+- une cible ;
+- un type ;
+- une Force ;
+- une date de création ;
+- des Épisodes significatifs.
+
+Les types actuellement représentés comprennent :
+
+```text
+Familiale
+Amicale
+Professionnelle
+Commerciale
+Politique
+Conflictuelle
+Sentimentale
+```
+
+---
+
+## RelationSystem
+
+`RelationSystem` constitue l'unique source de vérité pour l'évolution des relations sociales actuellement implémentées.
+
+Il gère :
+
+- l'érosion naturelle ;
+- le plancher familial ;
+- les interactions ;
+- la création des relations ;
+- leur disparition ;
+- les Épisodes.
+
+---
+
+## Plancher familial
+
+Une relation Familiale possède une protection contre la seule érosion naturelle.
+
+```text
+Force > plancher
+↓
+l'érosion peut descendre jusqu'au plancher
+```
+
+Mais :
+
+```text
+interaction négative
+↓
+Force peut descendre sous le plancher
+```
+
+Si la Force est déjà sous le plancher après une interaction :
+
+```text
+érosion naturelle
+↓
+la Force reste inchangée
+```
+
+Le temps ne doit donc jamais produire artificiellement :
+
+```text
+5 → 10
+```
+
+pour un plancher familial fixé à `10`.
+
+Une interaction suffisamment négative peut atteindre `0` et rompre la relation.
+
+Ce comportement est verrouillé par des tests de non-régression.
+
+---
+
+# 12. Compétences
+
+`SkillComponent` représente les Compétences connues par une Entity.
+
+Chaque Compétence possède notamment :
+
+```text
+Niveau
+DernierePratique
+```
+
+---
+
+## SkillSystem
+
+`SkillSystem` gère :
+
+- création lors de la première pratique ;
+- progression ;
+- gain décroissant ;
+- dernière pratique ;
+- déclin par inactivité.
+
+Le Niveau reste borné entre :
+
+```text
+0
+et
+100
+```
+
+Le gain marginal diminue à mesure que le Niveau augmente.
+
+---
+
+# 13. Héritage minimal
+
+`HeritageSystem` implémente actuellement la partie de GDB-004J pouvant être représentée sans système complet de patrimoine.
+
+Il détecte une Entity morte directement via :
+
+```text
+Lifecycle.CurrentState.Name == "mort"
+```
+
+Il ne lit pas `World.Events` pour décider d'agir.
+
+---
+
+## Désignation
+
+Le modèle actuellement implémenté privilégie :
+
+```text
+Relations Familiales
+↓
+Force la plus élevée
+↓
+égalité
+↓
+relation la plus ancienne
+```
+
+Si aucun successeur valide ne peut être déterminé, le System produit un événement observable d'absence de successeur.
+
+---
+
+## Non-retraitement
+
+Une Entity morte déjà traitée par `HeritageSystem` n'est jamais retraitée.
+
+Une même mort ne peut donc pas provoquer plusieurs transmissions.
+
+---
+
+## Refus
+
+Le refus d'héritage utilise désormais le flux :
+
+```text
+HeritageRefusalEffect
+↓
+PopulationEffectApplicator
+↓
+HeritageSystem.RefuserHeritage
+↓
+GameEvent observable
+```
+
+`PopulationEffectApplicator` ne contient aucune règle métier de refus.
+
+`HeritageSystem` constitue l'unique source de vérité pour ce comportement.
+
+---
+
+## Transmission incomplète
+
+Le cas conceptuel de transmission incomplète existe dans GDB-004J mais n'est pas encore implémenté.
+
+Il dépend de futurs systèmes représentant notamment :
+
+- le patrimoine matériel ;
+- les éléments transmissibles ;
+- les règles de redistribution.
+
+Il ne doit pas être simulé artificiellement avant leur spécification.
+
+---
+
+# 14. World.Events
+
+`World.Events` constitue le journal d'événements observable du World.
+
+Il peut contenir des événements comme :
+
+```text
+vie.mort
+heritage.transmission
+heritage.absence-successeur
+heritage.refus
+```
+
+Mais il ne constitue pas :
+
+- un EventBus ;
+- une queue de messages ;
+- un système Publish/Subscribe entre Systems ;
+- un canal de coordination.
+
+Les Systems déterminent leurs actions à partir de l'état du World.
+
+Les Events servent à observer et tracer les faits significatifs.
+
+---
+
+# 15. Persistence
+
+Le moteur dispose d'une première infrastructure de persistance.
+
+Elle permet notamment :
+
+```text
+World
+↓
+Snapshot / Serialization
+↓
+Stockage
+↓
+Restauration
+↓
+World
+```
+
+Le déterminisme doit être préservé après restauration.
+
+---
+
+# 16. Tests
+
+La règle actuelle est :
+
+> une fonctionnalité structurante n'est considérée comme intégrée qu'après compilation et validation de ses tests.
+
+État courant :
+
+```text
+dotnet build
+→ succès
+
+dotnet test
+→ 122 tests
+→ 122 réussis
+→ 0 échec
+→ 0 ignoré critique
+```
+
+Les tests couvrent notamment :
+
+- Entity ;
+- Components ;
+- Tick ;
+- Lifecycle ;
+- RNG déterministe ;
+- Events ;
+- Persistence ;
+- Scheduler ;
+- AgingSystem ;
+- NeedsDecaySystem ;
+- Action Pipeline ;
+- Relations ;
+- Compétences ;
+- Héritage ;
+- Effects de population.
+
+---
+
+# 17. Commandes
+
+Depuis la racine du dépôt :
 
 ```bash
 dotnet build
+```
+
+Puis :
+
+```bash
 dotnet test
 ```
 
-Prérequis : SDK .NET 10 (LTS). Le projet `Rendering/` (à venir) devra vérifier
-la version de .NET supportée par la version de Godot retenue au moment de sa
-création --- ADR-002 ne fixe que Godot comme moteur de rendu, pas sa version.
+Une modification ne doit pas être considérée comme validée si :
+
+```text
+build != succès
+```
+
+ou :
+
+```text
+tests != 100 % réussis
+```
 
 ---
 
-## Convention de code
+# 18. État actuel
 
-Aucune convention de code formelle n'existe encore (namespaces, style,
-organisation des fichiers). Une telle convention sera écrite au moment où
-un premier désaccord réel se présentera, pas avant --- conformément à
-MASTER-006 (« une décision qui ne peut être tranchée est explicitement
-ajournée ») et au principe directeur de MASTER-004 (« une règle n'existe que
-si elle fait économiser plus d'efforts qu'elle n'en demande »).
+Le moteur a dépassé le stade du simple Kernel.
 
-En attendant, ce dépôt suit les conventions .NET standard (PascalCase pour
-les types et méthodes publiques, un fichier par type public, dossiers
-reflétant les namespaces).
+Les couches actuellement disponibles sont :
+
+```text
+Kernel                     ✅
+World / Entity             ✅
+Components génériques      ✅
+Tick                        ✅
+Lifecycle                   ✅
+RNG déterministe           ✅
+Journal d'événements       ✅
+Persistence                ✅
+Scheduler                   ✅
+Needs                      ✅
+Aging                      ✅
+Action Pipeline             ✅
+Relations                  ✅
+Compétences                ✅
+Héritage minimal           ✅
+Effects population         ✅
+```
+
+Restent notamment hors périmètre actuel :
+
+```text
+Mémoire des habitants
+Perception
+Croyances
+Émotions
+Cognition avancée
+Réputation complète
+Économie complète
+Patrimoine matériel
+Transmission matérielle
+Simulation sociale avancée
+```
+
+Ces systèmes ne doivent être ajoutés qu'après leurs spécifications correspondantes.
+
+---
+
+# 19. Phase actuelle
+
+Le développement se situe dans la construction progressive de **v0.3**.
+
+L'objectif n'est pas encore de construire toute la profondeur finale de Chroniques.
+
+La priorité consiste à obtenir progressivement une vie simulée cohérente avec :
+
+```text
+besoins
+↓
+temps
+↓
+actions
+↓
+relations
+↓
+compétences
+↓
+transmission minimale
+```
+
+avant d'ajouter la cognition et la profondeur sociale avancée.
+
+---
+
+# 20. Workflow
+
+Pour les prochaines briques :
+
+```text
+GDB / ACT
+↓
+ENGINE
+↓
+Implémentation
+↓
+Tests rouges / verts
+↓
+Validation
+↓
+TECH
+↓
+Intégration
+```
+
+Une nouvelle règle métier ne doit pas apparaître uniquement dans le code.
+
+---
+
+# 21. Dépôt documentaire
+
+Le moteur doit toujours être lu conjointement avec le dépôt :
+
+```text
+CHRONIQUES
+```
+
+Les documents d'autorité y définissent :
+
+```text
+MASTER → gouvernance
+CORE   → primitives conceptuelles
+GDB    → règles de simulation
+ACT    → modèle d'actions
+ENGINE → architecture moteur
+TECH   → implémentations validées
+QA     → validation
+PROD   → feuille de route
+```
+
+---
+
+# 22. Statut
+
+```text
+CHRONIQUES-ENGINE
+Version de développement : v0.3
+Build : ✅
+Tests : ✅ 122 / 122
+Architecture : active
+Développement : en cours
+```
+
+Le moteur n'est pas considéré comme terminé.
+
+Il constitue désormais une base déterministe fonctionnelle sur laquelle les couches de simulation suivantes peuvent être construites sans remettre en cause les fondations existantes.
