@@ -1,5 +1,5 @@
 namespace Chroniques.Simulation.Tests;
-
+using Xunit;
 using Chroniques.Simulation.Actions;
 using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
