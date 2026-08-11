@@ -1,5 +1,6 @@
 namespace Chroniques.Simulation.Components;
 
+using System.Text.Json.Serialization;
 using Chroniques.Simulation.Kernel;
 
 /// <summary>
@@ -15,7 +16,9 @@ using Chroniques.Simulation.Kernel;
 /// </summary>
 public sealed class FoodProductComponent : IComponent
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ProductKindId { get; set; }
+
     public double FaimRestauree { get; set; }
     public int PortionsDisponibles { get; set; }
 }
