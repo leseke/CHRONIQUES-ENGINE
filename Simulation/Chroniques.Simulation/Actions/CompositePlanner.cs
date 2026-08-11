@@ -23,8 +23,9 @@ public sealed class CompositePlanner : IPlanner
                 nameof(planners));
         }
 
-        _planners = new Dictionary<string, IPlanner>(
-            planners,
+        _planners = planners.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value,
             StringComparer.Ordinal);
     }
 
