@@ -8,16 +8,9 @@ using Chroniques.Simulation.Kernel;
 /// Représentation sérialisable d'une Entity : son identité, plus chaque
 /// Component métier concret qui lui est attaché.
 ///
-/// Approche volontairement explicite plutôt que polymorphe : System.Text.Json
-/// ne sérialise pas nativement un <c>Dictionary&lt;Type, IComponent&gt;</c>
-/// sans convertisseur dédié. Tant qu'un petit nombre de Components existe,
-/// un champ nullable par type reste plus simple et plus lisible qu'un
-/// mécanisme générique.
-///
-/// ENGINE-012 ajoute <see cref="FoodProduct"/> afin qu'un produit alimentaire
-/// conserve sa valeur de restauration et ses portions disponibles après
-/// sauvegarde/rechargement. Le champ est omis lorsqu'il est null afin de ne
-/// pas modifier la forme JSON historique des Entities non alimentaires.
+/// L'approche reste volontairement explicite tant que le nombre de Components
+/// persistés reste faible. Les champs optionnels sont omis lorsqu'ils sont null
+/// afin de préserver la forme historique des sauvegardes non concernées.
 /// </summary>
 public sealed record EntitySnapshot(
     Guid Id,
@@ -26,7 +19,11 @@ public sealed record EntitySnapshot(
     NeedsComponent? Needs,
     AgeComponent? Age,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    FoodProductComponent? FoodProduct = null);
+    FoodProductComponent? FoodProduct = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ResourceStockComponent? ResourceStock = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ProductionProvenanceComponent? ProductionProvenance = null);
 
 /// <summary>
 /// Représentation sérialisable d'un <see cref="World"/>.
