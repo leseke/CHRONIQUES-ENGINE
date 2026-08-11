@@ -1,5 +1,6 @@
 namespace Chroniques.Simulation.Persistence;
 
+using System.Text.Json.Serialization;
 using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 
@@ -15,7 +16,8 @@ using Chroniques.Simulation.Kernel;
 ///
 /// ENGINE-012 ajoute <see cref="FoodProduct"/> afin qu'un produit alimentaire
 /// conserve sa valeur de restauration et ses portions disponibles après
-/// sauvegarde/rechargement.
+/// sauvegarde/rechargement. Le champ est omis lorsqu'il est null afin de ne
+/// pas modifier la forme JSON historique des Entities non alimentaires.
 /// </summary>
 public sealed record EntitySnapshot(
     Guid Id,
@@ -23,6 +25,7 @@ public sealed record EntitySnapshot(
     string LifecycleState,
     NeedsComponent? Needs,
     AgeComponent? Age,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     FoodProductComponent? FoodProduct = null);
 
 /// <summary>
