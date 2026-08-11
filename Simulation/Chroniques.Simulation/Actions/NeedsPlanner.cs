@@ -1,6 +1,7 @@
 namespace Chroniques.Simulation.Actions;
 
 using Chroniques.Simulation.Actions.Exemples;
+using Chroniques.Simulation.Autonomy;
 using Chroniques.Simulation.Kernel;
 
 /// <summary>
@@ -32,10 +33,10 @@ public sealed class NeedsPlanner : IPlanner
 
         return intent.Objectif switch
         {
-            Autonomy.NeedsIntentSource.RestObjective
+            NeedsIntentSource.RestObjective
                 => CreateRestPlan(intent),
 
-            Autonomy.NeedsIntentSource.EatObjective
+            NeedsIntentSource.EatObjective
                 => CreateEatPlan(intent, acteur, world),
 
             _ => throw new NotSupportedException(
