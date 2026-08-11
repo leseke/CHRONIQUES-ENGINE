@@ -6,10 +6,8 @@ using Chroniques.Simulation.Kernel;
 /// <summary>
 /// Sauvegarde et recharge un <see cref="World"/> en JSON.
 ///
-/// Format retenu pour v0.1/v0.2 : JSON, conformément à
-/// PROD/FeuilleDeRoute.md. Un format binaire plus compact pourra être
-/// introduit plus tard sans changer cette interface --- ce serait alors une
-/// décision à tracer par un ADR, pas un changement silencieux.
+/// Format retenu : JSON. Les Components métier actuellement persistés sont
+/// explicitement projetés dans <see cref="EntitySnapshot"/>.
 /// </summary>
 public static class WorldRepository
 {
@@ -25,12 +23,15 @@ public static class WorldRepository
             {
                 entity.TryGet<Components.NeedsComponent>(out var needs);
                 entity.TryGet<Components.AgeComponent>(out var age);
+                entity.TryGet<Components.FoodProductComponent>(out var foodProduct);
+
                 return new EntitySnapshot(
                     entity.Id.Value,
                     entity.Lifecycle.CreatedAt.Value,
                     entity.Lifecycle.CurrentState.Name,
                     needs,
-                    age);
+                    age,
+                    foodProduct);
             })
             .ToList();
 
@@ -52,10 +53,6 @@ public static class WorldRepository
 
         foreach (var entitySnapshot in snapshot.Entities)
         {
-            // Entity.Restore est internal : accessible ici car WorldRepository
-            // vit dans le même assembly que Entity, précisément pour que ce
-            // mécanisme de reconstruction reste réservé à la persistance et
-            // ne devienne jamais une API publique de création d'Entity.
             var entity = Entity.Restore(
                 new EntityId(entitySnapshot.Id),
                 new Tick(entitySnapshot.LifecycleCreatedAt),
@@ -69,6 +66,11 @@ public static class WorldRepository
             if (entitySnapshot.Age is not null)
             {
                 entity.Set(entitySnapshot.Age);
+            }
+
+            if (entitySnapshot.FoodProduct is not null)
+            {
+                entity.Set(entitySnapshot.FoodProduct);
             }
 
             world.Reintroduce(entity);
