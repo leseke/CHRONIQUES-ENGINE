@@ -51,7 +51,7 @@ public sealed class AutonomousNeedsLoopTests
         Assert.Equal(new Tick(1), world.CurrentTick);
         Assert.True(
             habitant.TryGet<NeedsComponent>(out var needsApresTick1));
-        Assert.Equal(61, needsApresTick1.Fatigue);
+        Assert.Equal(61d, needsApresTick1.Fatigue);
         Assert.Equal(
             0,
             world.Events.Count(
@@ -62,7 +62,7 @@ public sealed class AutonomousNeedsLoopTests
         Assert.Equal(new Tick(2), world.CurrentTick);
         Assert.True(
             habitant.TryGet<NeedsComponent>(out var needsApresTick2));
-        Assert.Equal(60, needsApresTick2.Fatigue);
+        Assert.Equal(60d, needsApresTick2.Fatigue);
         Assert.Equal(
             0,
             world.Events.Count(
@@ -73,7 +73,7 @@ public sealed class AutonomousNeedsLoopTests
         Assert.Equal(new Tick(3), world.CurrentTick);
         Assert.True(
             habitant.TryGet<NeedsComponent>(out var needsApresTick3));
-        Assert.Equal(79, needsApresTick3.Fatigue);
+        Assert.Equal(79d, needsApresTick3.Fatigue);
         Assert.Equal(
             1,
             world.Events.Count(
@@ -123,7 +123,7 @@ public sealed class AutonomousNeedsLoopTests
         Assert.Equal(new Tick(20), world.CurrentTick);
         Assert.True(
             habitant.TryGet<NeedsComponent>(out var needs));
-        Assert.Equal(60, needs.Fatigue);
+        Assert.Equal(60d, needs.Fatigue);
         Assert.Equal(
             4,
             world.Events.Count(
