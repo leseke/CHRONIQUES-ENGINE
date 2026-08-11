@@ -1,6 +1,8 @@
 namespace Chroniques.Simulation.Tests;
 
 using Xunit;
+using Chroniques.Simulation.Actions;
+using Chroniques.Simulation.Actions.Exemples;
 using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 using Chroniques.Simulation.Session;
@@ -186,6 +188,75 @@ public sealed class LifeSessionTests
         session.AdvanceTime();
 
         Assert.Equal(tickFin, world.CurrentTick);
+    }
+
+
+    [Fact]
+    public void ParcoursV03_ActionPuisVieillissementMortEtHeritage_AssureLaContinuite()
+    {
+        var world = CreerWorld();
+        var personnage = world.Spawn();
+        var heritier = world.Spawn();
+
+        personnage.Set(new AgeComponent { Annees = 79 });
+        personnage.Set(new NeedsComponent { Fatigue = 50 });
+        personnage.Set(new RelationComponent());
+
+        var relationSystem = new RelationSystem();
+        relationSystem.EnregistrerInteraction(
+            world,
+            Tick.Zero,
+            personnage.Id,
+            heritier.Id,
+            TypeRelation.Familiale,
+            10.0,
+            "famille");
+
+        var intent = new Intent(
+            personnage.Id,
+            "se_reposer",
+            Priorite: 1);
+
+        var pipeline = new PipelineRunner(
+            new SimplePlanner(),
+            new SimpleExecutionEngine());
+
+        var action = pipeline.ExecuterSeReposer(
+            intent,
+            personnage.Id,
+            world);
+
+        Assert.Equal(ActionState.Archived, action.State);
+        Assert.Equal(OutcomeForme.Reussite, action.Outcome?.Forme);
+        Assert.Contains(
+            world.Events,
+            evt =>
+                evt.Kind == "besoin.fatigue.restauree"
+                && evt.Source == personnage.Id);
+
+        var scheduler = new Scheduler();
+        scheduler.Register(new AgingSystem(esperanceDeVie: 80));
+        scheduler.Register(new HeritageSystem());
+
+        var session = new LifeSession(
+            world,
+            scheduler,
+            personnage.Id);
+
+        for (var i = 0; i < CalendrierSimule.MoisParAn; i++)
+        {
+            session.AdvanceTime();
+        }
+
+        Assert.Equal("mort", personnage.Lifecycle.CurrentState.Name);
+        Assert.Contains(
+            world.Events,
+            evt =>
+                evt.Kind == "heritage.transmission"
+                && evt.Source == personnage.Id
+                && evt.Target == heritier.Id);
+        Assert.Equal(LifeSessionState.Active, session.State);
+        Assert.Equal(heritier.Id, session.ActiveCharacterId);
     }
 
     private sealed class KillSystem : ISystem
