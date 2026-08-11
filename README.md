@@ -1,9 +1,9 @@
 # CHRONIQUES-ENGINE
 
 > Moteur de simulation déterministe du projet **Chroniques**  
-> État courant : **v0.3 — Boucle de vie minimale validée**  
+> État courant : **v0.4 — Premier lot d'autonomie validé**  
 > Build : ✅  
-> Tests : **134 / 134 réussis**
+> Tests : **146 / 146 réussis**
 
 ---
 
@@ -13,7 +13,7 @@
 
 Le dépôt n'est pas l'autorité métier du projet.
 
-Les règles et contrats sont définis en amont dans le dépôt documentaire `CHRONIQUES`, notamment par :
+Les règles et contrats sont définis en amont dans `CHRONIQUES` :
 
 ```text
 MASTER
@@ -33,88 +33,33 @@ Tests
 TECH
 ```
 
-Le moteur traduit ces spécifications en code C# déterministe, testable et indépendant du rendu.
+Le moteur traduit ces spécifications en C# déterministe, testable et indépendant du rendu.
 
 ---
 
 # 2. Principes
 
-Le moteur respecte plusieurs principes fondamentaux.
-
 ## Déterminisme
 
-À :
-
-```text
-World identique
-+
-Seed identique
-+
-Entrées identiques
-+
-Ordre de Systems identique
-```
-
-le moteur doit produire :
-
-```text
-Résultat identique
-```
-
-Le hasard passe par les primitives déterministes du Kernel.
-
----
+À World, seed, entrées et ordre de Systems identiques, le résultat observable doit être identique.
 
 ## Séparation données / logique
 
-Les Components portent l'état.
-
-Les Systems portent la logique.
-
 ```text
 Component
-=
-données
+= données
 
 System
-=
-transformation déterministe des données
+= transformation déterministe
 ```
-
-Un Component ne doit pas devenir un objet métier autonome contenant sa propre logique de simulation.
-
----
 
 ## Documentation First
 
-Lorsqu'une nouvelle infrastructure ou règle structurante est requise :
-
-```text
-Spécification
-↓
-Validation
-↓
-Implémentation
-↓
-Tests
-↓
-Documentation TECH
-```
-
-Le code ne doit pas inventer silencieusement des règles absentes des documents d'autorité.
-
----
+Une infrastructure structurante doit être spécifiée avant implémentation lorsqu'elle ne constitue pas la documentation rétroactive d'un code historique.
 
 ## Aucun couplage au rendu
 
-Le moteur ne dépend pas :
-
-- d'une interface graphique ;
-- d'un moteur 3D ;
-- d'une plateforme particulière ;
-- d'une technologie de présentation.
-
-Il doit pouvoir fonctionner sans rendu.
+La simulation reste indépendante de toute interface ou moteur graphique.
 
 ---
 
@@ -130,26 +75,17 @@ Chroniques.sln
     └── Chroniques.Simulation.Tests/
 ```
 
-Le projet principal contient le moteur.
-
-Le projet Tests contient les tests unitaires et d'intégration du moteur.
-
 ---
 
 # 4. Architecture actuelle
-
-L'architecture principale est organisée autour de plusieurs couches.
 
 ```text
 Kernel
 │
 ├── World
 ├── Entity
-├── Component
 ├── Tick
 ├── State
-├── Value
-├── Relation
 ├── Lifecycle
 ├── GameEvent
 └── DeterministicRandom
@@ -163,6 +99,7 @@ Components
 
 Systems
 │
+├── Scheduler
 ├── AgingSystem
 ├── NeedsDecaySystem
 ├── RelationSystem
@@ -185,100 +122,46 @@ Session
 ├── LifeSession
 └── LifeSessionState
 
+Autonomy
+│
+├── IAutonomousIntentSource
+├── IAutonomousIntentExecutor
+└── AutonomousActionSystem
+
 Persistence
 │
 └── WorldRepository
 ```
 
-L'arborescence exacte peut évoluer sans modifier les responsabilités décrites ci-dessus.
+---
+
+# 5. Kernel et World
+
+Le Kernel porte les primitives fondamentales.
+
+`World` contient l'état simulé, les Entities, le Tick et le journal observable `World.Events`.
+
+Une Entity porte des Components mais pas la logique métier.
 
 ---
 
-# 5. Kernel
+# 6. Scheduler
 
-Le Kernel constitue la couche fondamentale du moteur.
-
-Il expose les primitives génériques nécessaires à la simulation.
-
-## World
-
-`World` constitue le conteneur principal de l'état simulé.
-
-Il gère notamment :
-
-- les Entities ;
-- le Tick ;
-- les événements observables ;
-- les primitives nécessaires à la simulation déterministe.
-
----
-
-## Entity
-
-Une Entity représente une identité dans le World.
-
-Elle peut porter plusieurs Components.
-
-La logique métier ne vit pas directement dans l'Entity.
-
----
-
-## Components
-
-Les Components représentent des fragments d'état.
-
-Exemples actuels :
+Le Scheduler :
 
 ```text
-AgeComponent
-NeedsComponent
-RelationComponent
-SkillComponent
-```
-
-Une Entity ne possédant pas un Component donné peut simplement être ignorée par le System correspondant lorsque le contrat le prévoit.
-
----
-
-## Lifecycle
-
-Le `Lifecycle` représente l'évolution d'état d'une Entity.
-
-Il est notamment utilisé pour détecter l'état :
-
-```text
-mort
-```
-
-par `HeritageSystem` et par la couche de session lorsqu'elle synchronise le personnage contrôlé après un Tick.
-
-La mort n'est pas déduite uniquement par lecture de `World.Events`.
-
----
-
-# 6. Temps et Scheduler
-
-Le moteur utilise un temps simulé discret basé sur `Tick`.
-
-Le Scheduler garantit un ordre déterministe d'exécution des Systems.
-
-Conceptuellement :
-
-```text
-Tick
+World.Advance
 ↓
 System 1
 ↓
 System 2
 ↓
-System 3
-↓
 ...
-↓
-Tick suivant
 ```
 
-L'ordre d'enregistrement des Systems constitue donc une partie du comportement déterministe de la simulation.
+L'ordre d'enregistrement des Systems fait partie du comportement déterministe.
+
+Aucun System ne doit avancer lui-même le Tick.
 
 ---
 
@@ -288,23 +171,25 @@ L'ordre d'enregistrement des Systems constitue donc une partie du comportement d
 
 Fait évoluer les besoins au fil du temps.
 
-Il constitue l'une des premières briques de simulation autonome du moteur.
-
----
-
 ## AgingSystem
 
-Fait progresser l'âge des Entities concernées.
+Fait progresser l'âge et peut provoquer les transitions de fin de vie.
 
-Il peut également provoquer les transitions de Lifecycle liées à la fin de vie.
+## RelationSystem
+
+Gère l'évolution des relations sociales.
+
+## SkillSystem
+
+Gère pratique, progression et déclin des compétences.
+
+## HeritageSystem
+
+Détecte la mort via `Lifecycle` et porte la logique minimale de désignation d'un héritier.
 
 ---
 
-# 8. Action Pipeline
-
-Le moteur possède maintenant un premier pipeline d'Actions conforme aux contrats ACT et ENGINE-006.
-
-Le modèle conceptuel est :
+# 8. Action Pipeline — ENGINE-006
 
 ```text
 Intent
@@ -324,559 +209,281 @@ Effects
 World
 ```
 
-## Intent
+Le moteur dispose d'un premier `PipelineRunner` de démonstration autour de « Se reposer ».
 
-Exprime ce qu'un acteur cherche à accomplir.
-
-Il ne décrit pas comment l'objectif sera réalisé.
+Ce runner n'est pas présenté comme un catalogue universel de Verbes.
 
 ---
 
-## Planner
+# 9. Population — ENGINE-008
 
-Transforme un Intent en Plan lorsque les conditions nécessaires sont réunies.
-
----
-
-## Plan
-
-Décrit une séquence d'Actions permettant de tenter d'atteindre l'Intent.
-
----
-
-## Action Instance
-
-Représente l'exécution concrète d'une Action dans un contexte donné.
-
----
-
-## Outcome
-
-Décrit le résultat d'une Action résolue.
-
-Le résultat peut ensuite produire des Effects.
-
----
-
-# 9. Effects et résolution
-
-Le moteur sépare explicitement :
-
-```text
-résolution d'une Action
-```
-
-de :
-
-```text
-mutation métier du World
-```
-
-Le flux utilisé par les Effects de population est :
-
-```text
-Action Instance
-↓
-Execution Engine
-↓
-Effects typés
-↓
-PopulationEffectApplicator
-↓
-System responsable
-↓
-World
-```
-
-Le pipeline ne dépend donc pas directement de :
-
-- `RelationSystem` ;
-- `SkillSystem` ;
-- `HeritageSystem`.
-
-`PopulationEffectApplicator` assure actuellement le dispatch spécialisé des Effects de population.
-
----
-
-# 10. Population — ENGINE-008
-
-Le premier lot des Systems de population est implémenté et validé.
-
-Il couvre :
+Lot validé :
 
 ```text
 Relations
 Compétences
 Héritage minimal
+Effects de population
 ```
 
-La mémoire, la cognition et les autres couches psychologiques ne font pas partie de ce lot.
+La mémoire individuelle, les Habitudes, les Ambitions, la Mémoire du Monde et l'économie autonome restent hors de ce lot.
 
 ---
 
-# 11. Relations sociales
+# 10. Boucle de vie — ENGINE-009
 
-`RelationComponent` représente les relations actives d'une Entity.
-
-Une relation possède notamment :
-
-- une cible ;
-- un type ;
-- une Force ;
-- une date de création ;
-- des Épisodes significatifs.
-
-Les types actuellement représentés comprennent :
-
-```text
-Familiale
-Amicale
-Professionnelle
-Commerciale
-Politique
-Conflictuelle
-Sentimentale
-```
-
----
-
-## RelationSystem
-
-`RelationSystem` constitue l'unique source de vérité pour l'évolution des relations sociales actuellement implémentées.
-
-Il gère :
-
-- l'érosion naturelle ;
-- le plancher familial ;
-- les interactions ;
-- la création des relations ;
-- leur disparition ;
-- les Épisodes.
-
----
-
-## Plancher familial
-
-Une relation Familiale possède une protection contre la seule érosion naturelle.
-
-```text
-Force > plancher
-↓
-l'érosion peut descendre jusqu'au plancher
-```
-
-Mais :
-
-```text
-interaction négative
-↓
-Force peut descendre sous le plancher
-```
-
-Si la Force est déjà sous le plancher après une interaction :
-
-```text
-érosion naturelle
-↓
-la Force reste inchangée
-```
-
-Le temps ne doit donc jamais produire artificiellement :
-
-```text
-5 → 10
-```
-
-pour un plancher familial fixé à `10`.
-
-Une interaction suffisamment négative peut atteindre `0` et rompre la relation.
-
-Ce comportement est verrouillé par des tests de non-régression.
-
----
-
-# 12. Compétences
-
-`SkillComponent` représente les Compétences connues par une Entity.
-
-Chaque Compétence possède notamment :
-
-```text
-Niveau
-DernierePratique
-```
-
----
-
-## SkillSystem
-
-`SkillSystem` gère :
-
-- création lors de la première pratique ;
-- progression ;
-- gain décroissant ;
-- dernière pratique ;
-- déclin par inactivité.
-
-Le Niveau reste borné entre :
-
-```text
-0
-et
-100
-```
-
-Le gain marginal diminue à mesure que le Niveau augmente.
-
----
-
-# 13. Héritage minimal
-
-`HeritageSystem` implémente actuellement la partie de GDB-004J pouvant être représentée sans système complet de patrimoine.
-
-Il détecte une Entity morte directement via :
-
-```text
-Lifecycle.CurrentState.Name == "mort"
-```
-
-Il ne lit pas `World.Events` pour décider d'agir.
-
----
-
-## Désignation
-
-Le modèle actuellement implémenté privilégie :
-
-```text
-Relations Familiales
-↓
-Force la plus élevée
-↓
-égalité
-↓
-relation la plus ancienne
-```
-
-Si aucun successeur valide ne peut être déterminé, le System produit un événement observable d'absence de successeur.
-
----
-
-## Non-retraitement
-
-Une Entity morte déjà traitée par `HeritageSystem` n'est jamais retraitée.
-
-Une même mort ne peut donc pas provoquer plusieurs transmissions.
-
----
-
-## Refus
-
-Le refus d'héritage utilise le flux :
-
-```text
-HeritageRefusalEffect
-↓
-PopulationEffectApplicator
-↓
-HeritageSystem.RefuserHeritage
-↓
-GameEvent observable
-```
-
-`PopulationEffectApplicator` ne contient aucune règle métier de refus.
-
-`HeritageSystem` constitue l'unique source de vérité pour ce comportement.
-
----
-
-## Transmission incomplète
-
-Le cas conceptuel de transmission incomplète existe dans GDB-004J mais n'est pas encore implémenté.
-
-Il dépend de futurs systèmes représentant notamment :
-
-- le patrimoine matériel ;
-- les éléments transmissibles ;
-- les règles de redistribution.
-
-Il ne doit pas être simulé artificiellement avant leur spécification.
-
----
-
-# 14. Boucle de vie minimale — ENGINE-009
-
-Le moteur possède désormais une couche `Session` dédiée à l'orchestration du personnage contrôlé.
-
-`LifeSession` :
-
-- connaît le personnage actif ;
-- fait avancer exactement un Tick via le Scheduler lorsqu'on appelle `AdvanceTime()` ;
-- constate la mort via le `Lifecycle` ;
-- lit le résultat observable de `HeritageSystem` après le Tick ;
-- bascule le contrôle vers l'héritier si la transmission est valide ;
-- termine la session si aucun successeur valide n'existe.
-
-Elle ne :
-
-- sélectionne pas elle-même un héritier ;
-- modifie pas directement les Components métier ;
-- déclenche pas automatiquement une Action joueur ;
-- déclenche pas automatiquement une Action PNJ ;
-- transforme pas `World.Events` en EventBus.
-
-Flux minimal :
+`LifeSession` orchestre le personnage contrôlé.
 
 ```text
 LifeSession.AdvanceTime
 ↓
 Scheduler.Tick(World)
 ↓
-AgingSystem / Systems
+Systems
 ↓
-HeritageSystem
-↓
-fin du Tick
+Lifecycle / HeritageSystem
 ↓
 LifeSession synchronise le contrôle
 ```
 
-La décision d'exécuter une Action et celle de faire avancer le temps restent séparées.
+Elle :
 
-Aucune règle `1 Action = 1 Tick` n'est introduite.
+- conserve le personnage actif tant qu'il vit ;
+- constate sa mort via `Lifecycle` ;
+- récupère une transmission observable valide ;
+- bascule vers l'héritier ;
+- termine sans successeur lorsqu'aucune continuité n'est possible.
+
+Elle ne sélectionne jamais elle-même l'héritier et ne déclenche aucune Action automatiquement.
 
 ---
 
-# 15. World.Events
+# 11. Autonomie — ENGINE-010
 
-`World.Events` constitue le journal d'événements observable du World.
+Le premier mécanisme d'Actions autonomes est désormais implémenté et validé.
 
-Il peut contenir des événements comme :
+Flux :
 
 ```text
-vie.mort
-heritage.transmission
-heritage.absence-successeur
-heritage.refus
+Scheduler.Tick
+↓
+AutonomousActionSystem
+↓
+Acteur autonome enregistré
+↓
+IAutonomousIntentSource
+↓
+Intent?
+↓
+IAutonomousIntentExecutor
+↓
+ENGINE-006
+↓
+World
 ```
 
-Mais il ne constitue pas :
+---
+
+# 12. IAutonomousIntentSource
+
+Contrat :
+
+```csharp
+Intent? CreateIntent(
+    Entity actor,
+    World world,
+    Tick currentTick);
+```
+
+La source propose éventuellement un Intent.
+
+Elle ne mute pas directement le World.
+
+Aucune politique métier universelle de décision n'est actuellement intégrée au moteur.
+
+---
+
+# 13. IAutonomousIntentExecutor
+
+Contrat :
+
+```csharp
+void Execute(Intent intent, World world);
+```
+
+Cette frontière permet au System d'autonomie de ne connaître :
+
+- ni Planner concret ;
+- ni Execution Engine concret ;
+- ni Verbe concret.
+
+Elle n'est pas un second Action Pipeline.
+
+---
+
+# 14. AutonomousActionSystem
+
+Le System :
+
+- traite uniquement les Acteurs explicitement enregistrés ;
+- conserve leur ordre d'enregistrement ;
+- ignore une Entity absente ;
+- ignore une Entity morte ;
+- accepte qu'aucun Intent ne soit produit ;
+- rejette un Intent attribué à un autre Acteur ;
+- transmet un Intent valide à l'exécuteur ;
+- ne connaît aucun Verbe concret ;
+- ne modifie pas directement un Component métier ;
+- ne fait jamais avancer le Tick lui-même.
+
+L'enregistrement d'un même Acteur est idempotent.
+
+---
+
+# 15. Intégration autonome validée
+
+Le test d'intégration de référence démontre :
+
+```text
+Scheduler.Tick
+↓
+AutonomousActionSystem
+↓
+Intent "se_reposer"
+↓
+adaptateur IAutonomousIntentExecutor
+↓
+PipelineRunner
+↓
+Action Archived
+↓
+Outcome réussi
+↓
+Fatigue restaurée
+↓
+besoin.fatigue.restauree dans World.Events
+```
+
+Il prouve le raccordement réel avec ENGINE-006 sans prétendre résoudre tous les futurs Verbes.
+
+---
+
+# 16. World.Events
+
+`World.Events` reste un journal d'observabilité.
+
+Il ne constitue jamais :
 
 - un EventBus ;
 - une queue de messages ;
-- un système Publish/Subscribe entre Systems ;
-- un canal de coordination.
-
-Les Systems déterminent leurs actions à partir de l'état du World.
-
-Les Events servent à observer et tracer les faits significatifs.
-
-La couche `LifeSession` peut lire ces événements après un Tick pour constater un résultat déjà produit, sans faire communiquer les Systems entre eux.
+- un canal de coordination entre Systems.
 
 ---
 
-# 16. Persistence
+# 17. Persistence
 
-Le moteur dispose d'une première infrastructure de persistance.
-
-Elle permet notamment :
-
-```text
-World
-↓
-Snapshot / Serialization
-↓
-Stockage
-↓
-Restauration
-↓
-World
-```
+Le moteur dispose d'une première infrastructure de snapshot, sérialisation et restauration du World.
 
 Le déterminisme doit être préservé après restauration.
 
 ---
 
-# 17. Tests
+# 18. Tests
 
-La règle actuelle est :
-
-> une fonctionnalité structurante n'est considérée comme intégrée qu'après compilation et validation de ses tests.
-
-État courant validé le 11 août 2026 :
+État validé le **11 août 2026** :
 
 ```text
 dotnet build
 → succès
 
 dotnet test
-→ 134 tests
-→ 134 réussis
+→ 146 tests
+→ 146 réussis
 → 0 échec
-→ 0 ignoré critique
 ```
 
-Les tests couvrent notamment :
+Les 12 tests ajoutés pour ENGINE-010 couvrent notamment :
 
-- Entity ;
-- Components ;
-- Tick ;
-- Lifecycle ;
-- RNG déterministe ;
-- Events ;
-- Persistence ;
-- Scheduler ;
-- AgingSystem ;
-- NeedsDecaySystem ;
-- Action Pipeline ;
-- Relations ;
-- Compétences ;
-- Héritage ;
-- Effects de population ;
-- `LifeSession` ;
-- non-réutilisation d'une transmission ancienne ;
-- cible d'héritage inexistante ;
-- absence de sélection d'héritier par la session ;
-- absence d'Action automatique ;
-- déterminisme de la séquence de contrôle ;
-- parcours d'intégration v0.3.
+- Acteur enregistré vivant ;
+- Acteur non enregistré ;
+- Entity absente ;
+- Entity morte ;
+- absence d'Intent ;
+- exécution unique d'un Intent valide ;
+- rejet d'un Intent attribué à un autre Acteur ;
+- ordre déterministe des Acteurs ;
+- idempotence de l'enregistrement ;
+- déterminisme de la séquence ;
+- absence d'avancement direct du Tick ;
+- intégration Scheduler → autonomie → PipelineRunner → World.
 
-Le test d'intégration de référence démontre :
+---
+
+# 19. État des lots ENGINE récents
 
 ```text
-Action joueur
-↓
-progression temporelle
-↓
-vieillissement
-↓
-mort
-↓
-HeritageSystem
-↓
-transmission
-↓
-continuité avec l'héritier
+ENGINE-006  Action Pipeline                    ✅ Maturité 4
+ENGINE-008  Systems de population              ✅ Maturité 4
+ENGINE-009  Boucle de vie minimale             ✅ Maturité 4
+ENGINE-010  Orchestration habitants autonomes  ✅ Maturité 4
 ```
 
 ---
 
-# 18. Commandes
+# 20. ENGINE-C06
 
-Depuis la racine du dépôt :
-
-```bash
-dotnet build
-```
-
-Puis :
-
-```bash
-dotnet test
-```
-
-Une modification ne doit pas être considérée comme validée si :
+La lacune historique d'orchestration entre Scheduler et Actions autonomes est considérée résolue après validation d'ENGINE-010.
 
 ```text
-build != succès
+ENGINE-C06
+→ Clos
 ```
 
-ou :
-
-```text
-tests != 100 % réussis
-```
+Cette clôture ne signifie pas que la politique de décision des PNJ est terminée.
 
 ---
 
-# 19. État actuel
-
-Le moteur a dépassé le stade du simple Kernel et possède désormais un premier assemblage de vie continue.
-
-Les couches actuellement disponibles sont :
+# 21. Ce qui reste hors périmètre
 
 ```text
-Kernel                     ✅
-World / Entity             ✅
-Components génériques      ✅
-Tick                        ✅
-Lifecycle                   ✅
-RNG déterministe           ✅
-Journal d'événements       ✅
-Persistence                ✅
-Scheduler                   ✅
-Needs                      ✅
-Aging                      ✅
-Action Pipeline             ✅
-Relations                  ✅
-Compétences                ✅
-Héritage minimal           ✅
-Effects population         ✅
-LifeSession                 ✅
-Continuité avec héritier   ✅
-```
-
-Restent notamment hors périmètre actuel :
-
-```text
-PNJ autonomes
+Politique métier de décision PNJ
+Habitudes
+Ambitions
+Personnalité décisionnelle
+Mémoire individuelle
 Mémoire du Monde
+Économie autonome complète
+Métiers autonomes
 Perception
 Croyances
 Émotions
-Cognition avancée
-Réputation complète
-Économie autonome / complète
-Patrimoine matériel
-Transmission matérielle
+Catalogue complet de Verbes
 Simulation sociale avancée
 ```
 
-Ces systèmes ne doivent être ajoutés qu'après leurs spécifications correspondantes.
+---
+
+# 22. Phase actuelle
+
+Le moteur est entré dans **v0.4 — Le monde vivant**.
+
+Le premier raccordement d'autonomie est validé.
+
+La prochaine brique ne doit pas être codée avant d'avoir vérifié que les autorités GDB définissent suffisamment précisément la politique qu'elle doit traduire.
+
+Candidats documentaires prioritaires :
+
+```text
+GDB-004B — Besoins
+GDB-004D — Personnalités
+GDB-004E — Habitudes
+GDB-004F — Ambitions
+GDB-002E — Opportunités
+```
 
 ---
 
-# 20. Phase actuelle
-
-L'assemblage moteur minimal visé par **v0.3** est validé.
-
-Le moteur peut désormais démontrer techniquement :
-
-```text
-Action
-↓
-Temps
-↓
-Vieillissement
-↓
-Mort
-↓
-Héritage minimal
-↓
-Continuité du personnage contrôlé
-```
-
-Cette validation ne signifie pas que toute la richesse finale d'une vie jouable est déjà implémentée.
-
-Le prochain axe d'architecture prévu par la roadmap est **v0.4 — Le monde vivant**.
-
-Il concerne notamment :
-
-```text
-PNJ autonomes
-Économie autonome
-Mémoire du Monde
-Événements dynamiques
-Comportements autonomes
-```
-
-Aucune de ces briques ne doit être ajoutée avant sa spécification documentaire.
-
----
-
-# 21. Workflow
-
-Pour les prochaines briques :
+# 23. Workflow
 
 ```text
 GDB / ACT
@@ -885,61 +492,29 @@ ENGINE
 ↓
 Implémentation
 ↓
-Tests rouges / verts
+Tests
 ↓
 Validation
 ↓
 TECH
-↓
-Intégration
 ```
 
 Une nouvelle règle métier ne doit pas apparaître uniquement dans le code.
 
 ---
 
-# 22. Dépôt documentaire
-
-Le moteur doit toujours être lu conjointement avec le dépôt :
-
-```text
-CHRONIQUES
-```
-
-Les documents d'autorité y définissent :
-
-```text
-MASTER → gouvernance
-CORE   → primitives conceptuelles
-GDB    → règles de simulation
-ACT    → modèle d'actions
-ENGINE → architecture moteur
-TECH   → implémentations validées
-QA     → validation
-PROD   → feuille de route
-```
-
-Documents directement liés au dernier lot validé :
-
-```text
-ENGINE-009 — Boucle de vie minimale
-TECH-002 — Boucle de vie minimale
-```
-
----
-
-# 23. Statut
+# 24. Statut
 
 ```text
 CHRONIQUES-ENGINE
-Version de développement : v0.3
-État : assemblage minimal v0.3 validé
+Version de développement : v0.4
 Build : ✅
-Tests : ✅ 134 / 134
+Tests : ✅ 146 / 146
 Architecture : active
-Prochain axe : préparation v0.4 — Le monde vivant
+Autonomie orchestration : validée
+Développement : en cours
 ```
 
-Le moteur n'est pas considéré comme terminé.
+Le moteur n'est pas terminé.
 
-Il constitue désormais une base déterministe fonctionnelle avec continuité minimale de vie, sur laquelle les couches de monde autonome pourront être construites sans remettre en cause les responsabilités validées de v0.3.
+Il possède désormais une base déterministe capable d'orchestrer une vie contrôlée et de raccorder les premières Actions d'habitants autonomes au même pipeline d'exécution.
