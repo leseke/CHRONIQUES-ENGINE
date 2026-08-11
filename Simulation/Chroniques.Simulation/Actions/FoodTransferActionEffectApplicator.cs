@@ -45,6 +45,7 @@ public sealed class FoodTransferActionEffectApplicator : IActionEffectApplicator
         if (opportunity.RecipientId == actor.Id
             || opportunity.SourceFoodProductId == opportunity.DestinationFoodProductId
             || opportunity.Portions <= 0
+            || !HasExpectedTargets(instance, opportunity)
             || !world.TryGetEntity(opportunity.RecipientId, out _)
             || !world.TryGetEntity(opportunity.SourceFoodProductId, out var sourceEntity)
             || !world.TryGetEntity(opportunity.DestinationFoodProductId, out var destinationEntity)
@@ -60,11 +61,12 @@ public sealed class FoodTransferActionEffectApplicator : IActionEffectApplicator
             || source.FaimRestauree != destination.FaimRestauree)
         {
             throw new InvalidOperationException(
-                "VERB-004 ne peut pas appliquer un transfert devenu invalide.");
+                "Les Cibles, parties ou stocks ne correspondent plus au transfert validé.");
         }
 
         source.PortionsDisponibles -= opportunity.Portions;
-        destination.PortionsDisponibles += opportunity.Portions;
+        destination.PortionsDisponibles = checked(
+            destination.PortionsDisponibles + opportunity.Portions);
 
         foreach (var eventTemplate in instance.Definition.Contract.Events)
         {
@@ -74,5 +76,25 @@ public sealed class FoodTransferActionEffectApplicator : IActionEffectApplicator
                     eventTemplate.Kind,
                     instance.Acteur));
         }
+    }
+
+    private static bool HasExpectedTargets(
+        ActionInstance instance,
+        FoodTransferOpportunity opportunity)
+    {
+        if (instance.Cibles.Count != 3)
+        {
+            return false;
+        }
+
+        return instance.Cibles.Any(
+                target => target.Role == RoleCible.Principale
+                    && target.Cible == opportunity.DestinationFoodProductId)
+            && instance.Cibles.Any(
+                target => target.Role == RoleCible.Secondaire
+                    && target.Cible == opportunity.SourceFoodProductId)
+            && instance.Cibles.Any(
+                target => target.Role == RoleCible.Secondaire
+                    && target.Cible == opportunity.RecipientId);
     }
 }
