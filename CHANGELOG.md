@@ -12,9 +12,12 @@ Le format suit l'évolution réelle du moteur et non uniquement les commits Git.
 
 Les prochains lots seront définis par les documents d'autorité du dépôt `CHRONIQUES`.
 
-Candidats identifiés mais non encore implémentés :
+Prochain besoin identifié pour v0.3 :
 
-- mémoire des habitants ;
+- assemblage d'une **boucle de vie minimale complète**, permettant de relier les briques déjà présentes jusqu'à la continuité avec un héritier.
+
+Candidats identifiés pour des phases ultérieures, sans engagement d'implémentation :
+
 - perception ;
 - croyances ;
 - émotions ;
@@ -22,7 +25,10 @@ Candidats identifiés mais non encore implémentés :
 - patrimoine matériel ;
 - transmission complète ;
 - progression de la simulation sociale ;
+- Mémoire du Monde, ciblée par v0.4 ;
 - généralisation éventuelle du mécanisme d'application des Effects.
+
+La notion ambiguë de « mémoire des habitants » n'est plus utilisée comme cible v0.3. Toute mémoire simulée future doit être définie par sa bibliothèque d'autorité avant implémentation.
 
 Aucun de ces éléments n'est considéré comme engagé tant que la spécification correspondante n'est pas validée.
 
