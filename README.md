@@ -1,9 +1,9 @@
 # CHRONIQUES-ENGINE
 
 > Moteur de simulation déterministe du projet **Chroniques**  
-> État courant : **v0.3 — Population minimale en cours de construction**  
+> État courant : **v0.3 — Boucle de vie minimale validée**  
 > Build : ✅  
-> Tests : **122 / 122 réussis**
+> Tests : **134 / 134 réussis**
 
 ---
 
@@ -180,6 +180,11 @@ Actions
 ├── Effects
 └── PopulationEffectApplicator
 
+Session
+│
+├── LifeSession
+└── LifeSessionState
+
 Persistence
 │
 └── WorldRepository
@@ -245,9 +250,9 @@ Il est notamment utilisé pour détecter l'état :
 mort
 ```
 
-par `HeritageSystem`.
+par `HeritageSystem` et par la couche de session lorsqu'elle synchronise le personnage contrôlé après un Tick.
 
-La mort n'est pas détectée par lecture de `World.Events`.
+La mort n'est pas déduite uniquement par lecture de `World.Events`.
 
 ---
 
@@ -355,7 +360,7 @@ Le résultat peut ensuite produire des Effects.
 
 # 9. Effects et résolution
 
-Le moteur commence à séparer explicitement :
+Le moteur sépare explicitement :
 
 ```text
 résolution d'une Action
@@ -395,7 +400,7 @@ Le pipeline ne dépend donc pas directement de :
 
 # 10. Population — ENGINE-008
 
-Le premier lot des Systems de population est maintenant implémenté.
+Le premier lot des Systems de population est implémenté et validé.
 
 Il couvre :
 
@@ -405,7 +410,7 @@ Compétences
 Héritage minimal
 ```
 
-La mémoire, la cognition et les autres couches psychologiques ne font pas encore partie de ce lot.
+La mémoire, la cognition et les autres couches psychologiques ne font pas partie de ce lot.
 
 ---
 
@@ -567,7 +572,7 @@ Une même mort ne peut donc pas provoquer plusieurs transmissions.
 
 ## Refus
 
-Le refus d'héritage utilise désormais le flux :
+Le refus d'héritage utilise le flux :
 
 ```text
 HeritageRefusalEffect
@@ -599,7 +604,50 @@ Il ne doit pas être simulé artificiellement avant leur spécification.
 
 ---
 
-# 14. World.Events
+# 14. Boucle de vie minimale — ENGINE-009
+
+Le moteur possède désormais une couche `Session` dédiée à l'orchestration du personnage contrôlé.
+
+`LifeSession` :
+
+- connaît le personnage actif ;
+- fait avancer exactement un Tick via le Scheduler lorsqu'on appelle `AdvanceTime()` ;
+- constate la mort via le `Lifecycle` ;
+- lit le résultat observable de `HeritageSystem` après le Tick ;
+- bascule le contrôle vers l'héritier si la transmission est valide ;
+- termine la session si aucun successeur valide n'existe.
+
+Elle ne :
+
+- sélectionne pas elle-même un héritier ;
+- modifie pas directement les Components métier ;
+- déclenche pas automatiquement une Action joueur ;
+- déclenche pas automatiquement une Action PNJ ;
+- transforme pas `World.Events` en EventBus.
+
+Flux minimal :
+
+```text
+LifeSession.AdvanceTime
+↓
+Scheduler.Tick(World)
+↓
+AgingSystem / Systems
+↓
+HeritageSystem
+↓
+fin du Tick
+↓
+LifeSession synchronise le contrôle
+```
+
+La décision d'exécuter une Action et celle de faire avancer le temps restent séparées.
+
+Aucune règle `1 Action = 1 Tick` n'est introduite.
+
+---
+
+# 15. World.Events
 
 `World.Events` constitue le journal d'événements observable du World.
 
@@ -623,9 +671,11 @@ Les Systems déterminent leurs actions à partir de l'état du World.
 
 Les Events servent à observer et tracer les faits significatifs.
 
+La couche `LifeSession` peut lire ces événements après un Tick pour constater un résultat déjà produit, sans faire communiquer les Systems entre eux.
+
 ---
 
-# 15. Persistence
+# 16. Persistence
 
 Le moteur dispose d'une première infrastructure de persistance.
 
@@ -647,21 +697,21 @@ Le déterminisme doit être préservé après restauration.
 
 ---
 
-# 16. Tests
+# 17. Tests
 
 La règle actuelle est :
 
 > une fonctionnalité structurante n'est considérée comme intégrée qu'après compilation et validation de ses tests.
 
-État courant :
+État courant validé le 11 août 2026 :
 
 ```text
 dotnet build
 → succès
 
 dotnet test
-→ 122 tests
-→ 122 réussis
+→ 134 tests
+→ 134 réussis
 → 0 échec
 → 0 ignoré critique
 ```
@@ -682,11 +732,36 @@ Les tests couvrent notamment :
 - Relations ;
 - Compétences ;
 - Héritage ;
-- Effects de population.
+- Effects de population ;
+- `LifeSession` ;
+- non-réutilisation d'une transmission ancienne ;
+- cible d'héritage inexistante ;
+- absence de sélection d'héritier par la session ;
+- absence d'Action automatique ;
+- déterminisme de la séquence de contrôle ;
+- parcours d'intégration v0.3.
+
+Le test d'intégration de référence démontre :
+
+```text
+Action joueur
+↓
+progression temporelle
+↓
+vieillissement
+↓
+mort
+↓
+HeritageSystem
+↓
+transmission
+↓
+continuité avec l'héritier
+```
 
 ---
 
-# 17. Commandes
+# 18. Commandes
 
 Depuis la racine du dépôt :
 
@@ -714,9 +789,9 @@ tests != 100 % réussis
 
 ---
 
-# 18. État actuel
+# 19. État actuel
 
-Le moteur a dépassé le stade du simple Kernel.
+Le moteur a dépassé le stade du simple Kernel et possède désormais un premier assemblage de vie continue.
 
 Les couches actuellement disponibles sont :
 
@@ -737,18 +812,21 @@ Relations                  ✅
 Compétences                ✅
 Héritage minimal           ✅
 Effects population         ✅
+LifeSession                 ✅
+Continuité avec héritier   ✅
 ```
 
 Restent notamment hors périmètre actuel :
 
 ```text
-Mémoire des habitants
+PNJ autonomes
+Mémoire du Monde
 Perception
 Croyances
 Émotions
 Cognition avancée
 Réputation complète
-Économie complète
+Économie autonome / complète
 Patrimoine matériel
 Transmission matérielle
 Simulation sociale avancée
@@ -758,33 +836,45 @@ Ces systèmes ne doivent être ajoutés qu'après leurs spécifications correspo
 
 ---
 
-# 19. Phase actuelle
+# 20. Phase actuelle
 
-Le développement se situe dans la construction progressive de **v0.3**.
+L'assemblage moteur minimal visé par **v0.3** est validé.
 
-L'objectif n'est pas encore de construire toute la profondeur finale de Chroniques.
-
-La priorité consiste à obtenir progressivement une vie simulée cohérente avec :
+Le moteur peut désormais démontrer techniquement :
 
 ```text
-besoins
+Action
 ↓
-temps
+Temps
 ↓
-actions
+Vieillissement
 ↓
-relations
+Mort
 ↓
-compétences
+Héritage minimal
 ↓
-transmission minimale
+Continuité du personnage contrôlé
 ```
 
-avant d'ajouter la cognition et la profondeur sociale avancée.
+Cette validation ne signifie pas que toute la richesse finale d'une vie jouable est déjà implémentée.
+
+Le prochain axe d'architecture prévu par la roadmap est **v0.4 — Le monde vivant**.
+
+Il concerne notamment :
+
+```text
+PNJ autonomes
+Économie autonome
+Mémoire du Monde
+Événements dynamiques
+Comportements autonomes
+```
+
+Aucune de ces briques ne doit être ajoutée avant sa spécification documentaire.
 
 ---
 
-# 20. Workflow
+# 21. Workflow
 
 Pour les prochaines briques :
 
@@ -808,7 +898,7 @@ Une nouvelle règle métier ne doit pas apparaître uniquement dans le code.
 
 ---
 
-# 21. Dépôt documentaire
+# 22. Dépôt documentaire
 
 Le moteur doit toujours être lu conjointement avec le dépôt :
 
@@ -829,19 +919,27 @@ QA     → validation
 PROD   → feuille de route
 ```
 
+Documents directement liés au dernier lot validé :
+
+```text
+ENGINE-009 — Boucle de vie minimale
+TECH-002 — Boucle de vie minimale
+```
+
 ---
 
-# 22. Statut
+# 23. Statut
 
 ```text
 CHRONIQUES-ENGINE
 Version de développement : v0.3
+État : assemblage minimal v0.3 validé
 Build : ✅
-Tests : ✅ 122 / 122
+Tests : ✅ 134 / 134
 Architecture : active
-Développement : en cours
+Prochain axe : préparation v0.4 — Le monde vivant
 ```
 
 Le moteur n'est pas considéré comme terminé.
 
-Il constitue désormais une base déterministe fonctionnelle sur laquelle les couches de simulation suivantes peuvent être construites sans remettre en cause les fondations existantes.
+Il constitue désormais une base déterministe fonctionnelle avec continuité minimale de vie, sur laquelle les couches de monde autonome pourront être construites sans remettre en cause les responsabilités validées de v0.3.
