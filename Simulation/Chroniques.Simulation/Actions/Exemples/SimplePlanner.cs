@@ -4,11 +4,13 @@ using Chroniques.Simulation.Kernel;
 namespace Chroniques.Simulation.Actions.Exemples;
 
 /// <summary>
-/// Planner minimal de démonstration (ACT-002-H, section Production).
-/// Reconnaît uniquement l'objectif <c>"se_reposer"</c> et produit un Plan
-/// à une seule étape --- ce n'est jamais un Planner destiné à un usage
-/// réel, seulement une preuve que le pipeline (ENGINE-006) fonctionne de
-/// bout en bout.
+/// Planner minimal actuellement limité à l'unique Verbe canonique exécutable
+/// de bout en bout : <c>VERB-001 — Se reposer</c>.
+///
+/// Il reconnaît uniquement l'objectif <c>"se_reposer"</c> et produit un Plan
+/// à une seule étape. Il ne constitue pas encore un Planner général : un
+/// second Verbe réel devra d'abord démontrer le besoin d'un dispatch plus
+/// large conformément à ACT-008-A et MASTER-006.
 /// </summary>
 public sealed class SimplePlanner : IPlanner
 {
