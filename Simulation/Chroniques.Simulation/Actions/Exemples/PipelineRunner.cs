@@ -5,14 +5,13 @@ namespace Chroniques.Simulation.Actions.Exemples;
 
 /// <summary>
 /// Orchestre le pipeline complet (ENGINE-006, section 5) pour l'unique
-/// Verbe de démonstration « Se reposer » --- d'un Intent jusqu'à
-/// l'archivage de l'Action Instance, Effect appliqué et Event publié.
+/// Verbe actuellement exécutable de bout en bout :
+/// <c>VERB-001 — Se reposer</c>.
 ///
-/// L'application des Effects reste ici câblée spécifiquement pour « Se
-/// reposer » --- un interprète générique, capable de traiter n'importe
-/// quel <see cref="ConsequenceTemplate"/>, n'existe pas encore et ne doit
-/// pas être anticipé avant qu'un second Verbe réel n'en démontre le
-/// besoin (MASTER-006).
+/// L'application des Effects reste câblée spécifiquement pour ce Verbe.
+/// Un interprète générique capable de traiter plusieurs Verbes n'existe pas
+/// encore et ne doit pas être anticipé avant qu'un second Verbe réel n'en
+/// démontre le besoin conformément à MASTER-006 et ACT-008-A.
 /// </summary>
 public sealed class PipelineRunner
 {
