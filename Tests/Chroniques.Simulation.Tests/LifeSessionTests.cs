@@ -190,6 +190,67 @@ public sealed class LifeSessionTests
         Assert.Equal(tickFin, world.CurrentTick);
     }
 
+    [Fact]
+    public void AdvanceTime_SansHeritageSystem_NeDesigneJamaisLuiMemeUnHeritier()
+    {
+        var world = CreerWorld();
+        var personnage = world.Spawn();
+        var heritier = world.Spawn();
+
+        personnage.Set(new RelationComponent());
+
+        var relationSystem = new RelationSystem();
+        relationSystem.EnregistrerInteraction(
+            world,
+            Tick.Zero,
+            personnage.Id,
+            heritier.Id,
+            TypeRelation.Familiale,
+            25.0,
+            "famille");
+
+        TuerEntity(personnage, Tick.Zero);
+
+        var scheduler = new Scheduler();
+        var session = new LifeSession(world, scheduler, personnage.Id);
+
+        session.AdvanceTime();
+
+        Assert.Equal(personnage.Id, session.ActiveCharacterId);
+        Assert.DoesNotContain(
+            world.Events,
+            evt =>
+                evt.Kind == "heritage.transmission"
+                && evt.Source == personnage.Id);
+    }
+
+    [Fact]
+    public void AdvanceTime_NeDeclencheAucuneActionAutomatiquement()
+    {
+        var world = CreerWorld();
+        var personnage = world.Spawn();
+        personnage.Set(new NeedsComponent { Fatigue = 50 });
+
+        var scheduler = new Scheduler();
+        var session = new LifeSession(world, scheduler, personnage.Id);
+
+        session.AdvanceTime();
+
+        Assert.DoesNotContain(
+            world.Events,
+            evt =>
+                evt.Kind == "besoin.fatigue.restauree"
+                && evt.Source == personnage.Id);
+    }
+
+    [Fact]
+    public void AdvanceTime_MemesEtatEtEntrees_ProduitMemeSequenceDeControle()
+    {
+        var premiereSequence = ExecuterSequenceDeterministe();
+        var secondeSequence = ExecuterSequenceDeterministe();
+
+        Assert.Equal(premiereSequence, secondeSequence);
+    }
 
     [Fact]
     public void ParcoursV03_ActionPuisVieillissementMortEtHeritage_AssureLaContinuite()
@@ -257,6 +318,57 @@ public sealed class LifeSessionTests
                 && evt.Target == heritier.Id);
         Assert.Equal(LifeSessionState.Active, session.State);
         Assert.Equal(heritier.Id, session.ActiveCharacterId);
+    }
+
+    private static List<string> ExecuterSequenceDeterministe()
+    {
+        var world = CreerWorld();
+        var personnage = world.Spawn();
+        var heritier = world.Spawn();
+
+        personnage.Set(new AgeComponent { Annees = 79 });
+        personnage.Set(new RelationComponent());
+
+        var relationSystem = new RelationSystem();
+        relationSystem.EnregistrerInteraction(
+            world,
+            Tick.Zero,
+            personnage.Id,
+            heritier.Id,
+            TypeRelation.Familiale,
+            10.0,
+            "famille");
+
+        var scheduler = new Scheduler();
+        scheduler.Register(new AgingSystem(esperanceDeVie: 80));
+        scheduler.Register(new HeritageSystem());
+
+        var session = new LifeSession(
+            world,
+            scheduler,
+            personnage.Id);
+
+        var sequence = new List<string> { "A" };
+
+        for (var i = 0; i < CalendrierSimule.MoisParAn; i++)
+        {
+            session.AdvanceTime();
+
+            if (session.ActiveCharacterId == personnage.Id)
+            {
+                sequence.Add("A");
+            }
+            else if (session.ActiveCharacterId == heritier.Id)
+            {
+                sequence.Add("B");
+            }
+            else
+            {
+                sequence.Add("?");
+            }
+        }
+
+        return sequence;
     }
 
     private sealed class KillSystem : ISystem
