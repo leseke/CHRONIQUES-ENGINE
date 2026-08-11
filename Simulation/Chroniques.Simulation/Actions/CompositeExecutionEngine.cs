@@ -23,8 +23,9 @@ public sealed class CompositeExecutionEngine : IExecutionEngine
                 nameof(engines));
         }
 
-        _engines = new Dictionary<string, IExecutionEngine>(
-            engines,
+        _engines = engines.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value,
             StringComparer.Ordinal);
     }
 
