@@ -1,9 +1,9 @@
 # CHRONIQUES-ENGINE
 
 > Moteur de simulation déterministe du projet **Chroniques**  
-> État courant : **v0.4 — Premier lot d'autonomie validé**  
+> État courant : **v0.4 — Autonomie par besoins consolidée**  
 > Build : ✅  
-> Tests : **146 / 146 réussis**
+> Tests : **178 / 178 réussis**
 
 ---
 
@@ -49,8 +49,8 @@ Le moteur traduit ces spécifications en C# déterministe, testable et indépend
 Component
 = données
 
-System
-= transformation déterministe
+System / service moteur
+= transformation ou orchestration
 ```
 
 ## Documentation First
@@ -95,7 +95,8 @@ Components
 ├── AgeComponent
 ├── NeedsComponent
 ├── RelationComponent
-└── SkillComponent
+├── SkillComponent
+└── FoodProductComponent
 
 Systems
 │
@@ -109,24 +110,27 @@ Systems
 Actions
 │
 ├── Intent
-├── Planner
-├── Plan
+├── Planner / NeedsPlanner
+├── Plan / PlanStep + Cibles
 ├── ActionDefinition
 ├── ActionInstance
 ├── Outcome
-├── Effects
-└── PopulationEffectApplicator
-
-Session
-│
-├── LifeSession
-└── LifeSessionState
+├── NeedsExecutionEngine
+├── ActionEffectDispatcher
+├── RestActionEffectApplicator
+└── FoodActionEffectApplicator
 
 Autonomy
 │
 ├── IAutonomousIntentSource
 ├── IAutonomousIntentExecutor
-└── AutonomousActionSystem
+├── AutonomousActionSystem
+└── NeedsIntentSource
+
+Session
+│
+├── LifeSession
+└── LifeSessionState
 
 Persistence
 │
@@ -147,7 +151,7 @@ Une Entity porte des Components mais pas la logique métier.
 
 # 6. Scheduler
 
-Le Scheduler :
+Le Scheduler reste l'autorité temporelle :
 
 ```text
 World.Advance
@@ -209,9 +213,16 @@ Effects
 World
 ```
 
-Le moteur dispose d'un premier `PipelineRunner` de démonstration autour de « Se reposer ».
+Le pipeline supporte maintenant deux Verbes réellement validés :
 
-Ce runner n'est pas présenté comme un catalogue universel de Verbes.
+```text
+VERB-001 — Se reposer
+VERB-002 — Manger
+```
+
+`PipelineRunner.Execute(...)` constitue l'entrée commune du bloc actuel.
+
+Le runner ne contient pas les règles métier de repos ou d'alimentation ; il délègue leur application aux applicateurs d'Effects.
 
 ---
 
@@ -226,7 +237,7 @@ Héritage minimal
 Effects de population
 ```
 
-La mémoire individuelle, les Habitudes, les Ambitions, la Mémoire du Monde et l'économie autonome restent hors de ce lot.
+La mémoire individuelle, les Habitudes, les Ambitions, la Mémoire du Monde et l'économie autonome complète restent hors de ce lot.
 
 ---
 
@@ -246,23 +257,15 @@ Lifecycle / HeritageSystem
 LifeSession synchronise le contrôle
 ```
 
-Elle :
+Elle conserve le personnage actif tant qu'il vit, constate sa mort via `Lifecycle`, récupère une transmission observable valide, bascule vers l'héritier ou termine sans successeur.
 
-- conserve le personnage actif tant qu'il vit ;
-- constate sa mort via `Lifecycle` ;
-- récupère une transmission observable valide ;
-- bascule vers l'héritier ;
-- termine sans successeur lorsqu'aucune continuité n'est possible.
-
-Elle ne sélectionne jamais elle-même l'héritier et ne déclenche aucune Action automatiquement.
+Elle ne choisit pas elle-même l'héritier.
 
 ---
 
-# 11. Autonomie — ENGINE-010
+# 11. Orchestration autonome — ENGINE-010
 
-Le premier mécanisme d'Actions autonomes est désormais implémenté et validé.
-
-Flux :
+Flux validé :
 
 ```text
 Scheduler.Tick
@@ -282,93 +285,229 @@ ENGINE-006
 World
 ```
 
----
-
-# 12. IAutonomousIntentSource
-
-Contrat :
-
-```csharp
-Intent? CreateIntent(
-    Entity actor,
-    World world,
-    Tick currentTick);
-```
-
-La source propose éventuellement un Intent.
-
-Elle ne mute pas directement le World.
-
-Aucune politique métier universelle de décision n'est actuellement intégrée au moteur.
-
----
-
-# 13. IAutonomousIntentExecutor
-
-Contrat :
-
-```csharp
-void Execute(Intent intent, World world);
-```
-
-Cette frontière permet au System d'autonomie de ne connaître :
-
-- ni Planner concret ;
-- ni Execution Engine concret ;
-- ni Verbe concret.
-
-Elle n'est pas un second Action Pipeline.
-
----
-
-# 14. AutonomousActionSystem
-
-Le System :
+`AutonomousActionSystem` :
 
 - traite uniquement les Acteurs explicitement enregistrés ;
-- conserve leur ordre d'enregistrement ;
-- ignore une Entity absente ;
-- ignore une Entity morte ;
-- accepte qu'aucun Intent ne soit produit ;
-- rejette un Intent attribué à un autre Acteur ;
-- transmet un Intent valide à l'exécuteur ;
+- conserve leur ordre ;
+- ignore une Entity absente ou morte ;
+- accepte `null` comme absence de décision ;
+- vérifie la cohérence `intent.Acteur` ;
 - ne connaît aucun Verbe concret ;
-- ne modifie pas directement un Component métier ;
-- ne fait jamais avancer le Tick lui-même.
-
-L'enregistrement d'un même Acteur est idempotent.
+- ne fait jamais avancer le Tick.
 
 ---
 
-# 15. Intégration autonome validée
+# 12. Décision autonome — ENGINE-011 / ENGINE-012
 
-Le test d'intégration de référence démontre :
+Le moteur possède maintenant une première politique métier concrète : `NeedsIntentSource`.
+
+## Repos
 
 ```text
-Scheduler.Tick
-↓
-AutonomousActionSystem
+Fatigue < seuil configuré
 ↓
 Intent "se_reposer"
-↓
-adaptateur IAutonomousIntentExecutor
-↓
-PipelineRunner
-↓
-Action Archived
-↓
-Outcome réussi
-↓
-Fatigue restaurée
-↓
-besoin.fatigue.restauree dans World.Events
 ```
 
-Il prouve le raccordement réel avec ENGINE-006 sans prétendre résoudre tous les futurs Verbes.
+## Alimentation
+
+```text
+Faim < seuil configuré
++
+nourriture accessible
+↓
+Intent "manger"
+```
+
+Une Faim basse sans nourriture accessible ne crée pas de faux Intent.
 
 ---
 
-# 16. World.Events
+# 13. Arbitrage des besoins
+
+Lorsque Faim et Fatigue sont simultanément actionnables :
+
+```text
+satisfaction la plus basse
+→ besoin retenu
+```
+
+En cas d'égalité stricte :
+
+```text
+Faim
+avant
+Fatigue
+```
+
+Ce tie-break est uniquement technique et déterministe.
+
+Aucune personnalité, Habitude ou Ambition n'est encore pondérée dans cette décision.
+
+---
+
+# 14. FoodProductComponent
+
+Le produit alimentaire minimal est représenté par :
+
+```text
+FaimRestauree
+PortionsDisponibles
+```
+
+Une Action `Manger` réussie :
+
+```text
+PortionsDisponibles - 1
++
+Faim de l'Acteur restaurée
+```
+
+La restauration reste bornée à `100`.
+
+Le moteur ne crée pas gratuitement une nourriture au moment de la décision.
+
+---
+
+# 15. Accessibilité alimentaire
+
+L'accès à une nourriture passe par :
+
+```text
+IAccessibleFoodResolver
+```
+
+Cette frontière permet de savoir si une Entity alimentaire est actuellement utilisable par un Acteur sans imposer encore :
+
+- inventaire général ;
+- propriété ;
+- stockage ;
+- distance universelle ;
+- système commercial.
+
+Une future implémentation d'inventaire ou de possession pourra se brancher derrière cette frontière.
+
+---
+
+# 16. Plan et Cibles
+
+`PlanStep` peut désormais porter ses `Cibles`.
+
+Pour le repos :
+
+```text
+Cible principale = Acteur
+```
+
+Pour l'alimentation :
+
+```text
+Cible principale = produit alimentaire
+Cible secondaire = Acteur
+```
+
+La Cible concrète reste absente de l'Intent ; elle est matérialisée par le Planner.
+
+---
+
+# 17. NeedsPlanner
+
+`NeedsPlanner` reconnaît exactement :
+
+```text
+se_reposer
+manger
+```
+
+Il ne constitue pas un Planner universel de tous les futurs Verbes.
+
+Pour `manger`, il demande une nourriture accessible au resolver puis produit le `PlanStep` correspondant.
+
+---
+
+# 18. NeedsExecutionEngine
+
+Le moteur d'exécution du bloc valide les conditions techniques nécessaires avant réussite.
+
+`Manger` échoue ou ne peut être planifié si la nourriture :
+
+- n'existe plus ;
+- n'est pas alimentaire ;
+- est épuisée ;
+- n'est plus accessible.
+
+Aucun Effect n'est appliqué après un Outcome en échec.
+
+---
+
+# 19. Effects
+
+L'application métier est séparée du runner :
+
+```text
+ActionEffectDispatcher
+├── RestActionEffectApplicator
+└── FoodActionEffectApplicator
+```
+
+Le dispatcher applique l'applicateur compatible avec l'Action réussie.
+
+Pour l'alimentation, les faits observables sont :
+
+```text
+produit.alimentaire.consomme
+besoin.faim.restauree
+```
+
+Pour le repos :
+
+```text
+besoin.fatigue.restauree
+```
+
+---
+
+# 20. Persistence
+
+`FoodProductComponent` survit aux sauvegardes/rechargements via `EntitySnapshot` et `WorldRepository`.
+
+Le champ reste nullable afin de ne pas transformer toutes les Entities en produits alimentaires.
+
+---
+
+# 21. Boucles autonomes validées
+
+Le moteur sait maintenant produire une régulation autonome réelle :
+
+```text
+NeedsDecaySystem
+↓
+Fatigue franchit son seuil
+↓
+se_reposer
+↓
+Fatigue restaurée
+```
+
+et :
+
+```text
+Faim franchit son seuil
++
+nourriture accessible
+↓
+manger
+↓
+portion consommée
++
+Faim restaurée
+```
+
+La première boucle a également été validée sur plusieurs Ticks sans entrée joueur.
+
+---
+
+# 22. World.Events
 
 `World.Events` reste un journal d'observabilité.
 
@@ -380,15 +519,7 @@ Il ne constitue jamais :
 
 ---
 
-# 17. Persistence
-
-Le moteur dispose d'une première infrastructure de snapshot, sérialisation et restauration du World.
-
-Le déterminisme doit être préservé après restauration.
-
----
-
-# 18. Tests
+# 23. Tests
 
 État validé le **11 août 2026** :
 
@@ -397,93 +528,102 @@ dotnet build
 → succès
 
 dotnet test
-→ 146 tests
-→ 146 réussis
+→ 178 tests
+→ 178 réussis
 → 0 échec
 ```
 
-Les 12 tests ajoutés pour ENGINE-010 couvrent notamment :
+Le périmètre couvre notamment :
 
-- Acteur enregistré vivant ;
-- Acteur non enregistré ;
-- Entity absente ;
-- Entity morte ;
-- absence d'Intent ;
-- exécution unique d'un Intent valide ;
-- rejet d'un Intent attribué à un autre Acteur ;
-- ordre déterministe des Acteurs ;
-- idempotence de l'enregistrement ;
-- déterminisme de la séquence ;
-- absence d'avancement direct du Tick ;
-- intégration Scheduler → autonomie → PipelineRunner → World.
+- orchestration autonome ;
+- seuil strict de Fatigue ;
+- régulation multi-Tick ;
+- chaîne ACT `Entretien → Repos → SeReposer` ;
+- seuil strict de Faim ;
+- absence de faux Intent sans nourriture ;
+- arbitrage déterministe Faim/Fatigue ;
+- chaîne ACT `Entretien → Alimentation → Manger` ;
+- Cibles portées par le Plan ;
+- nourriture absente, épuisée ou inaccessible ;
+- consommation réelle d'une portion ;
+- restauration de Faim ;
+- publication des Events ;
+- persistance alimentaire ;
+- compatibilité du comportement repos existant ;
+- intégration Scheduler → autonomie → pipeline → World.
 
 ---
 
-# 19. État des lots ENGINE récents
+# 24. État des lots ENGINE récents
 
 ```text
 ENGINE-006  Action Pipeline                    ✅ Maturité 4
 ENGINE-008  Systems de population              ✅ Maturité 4
 ENGINE-009  Boucle de vie minimale             ✅ Maturité 4
 ENGINE-010  Orchestration habitants autonomes  ✅ Maturité 4
+ENGINE-011  Décision autonome par besoins      ✅ Maturité 4
+ENGINE-012  Alimentation autonome minimale     ✅ Maturité 4
 ```
 
 ---
 
-# 20. ENGINE-C06
-
-La lacune historique d'orchestration entre Scheduler et Actions autonomes est considérée résolue après validation d'ENGINE-010.
+# 25. Documentation technique
 
 ```text
-ENGINE-C06
-→ Clos
+TECH-001 — Systems de population
+TECH-002 — Boucle de vie minimale
+TECH-003 — Orchestration des habitants autonomes
+TECH-004 — Décision autonome par besoins
 ```
 
-Cette clôture ne signifie pas que la politique de décision des PNJ est terminée.
+TECH-004 consolide ENGINE-011 et ENGINE-012 comme une seule capacité technique cohérente.
 
 ---
 
-# 21. Ce qui reste hors périmètre
+# 26. Ce qui reste hors périmètre
 
 ```text
-Politique métier de décision PNJ
-Habitudes
-Ambitions
-Personnalité décisionnelle
-Mémoire individuelle
-Mémoire du Monde
+Inventaire général
+Propriété
+Travail autonome
 Économie autonome complète
-Métiers autonomes
+Production alimentaire autonome
+Achat / vente autonomes
+Habitudes pondérées
+Ambitions pondérées
+Personnalité décisionnelle pondérée
+Mémoire individuelle avancée
+Mémoire du Monde
+Interactions sociales autonomes complètes
 Perception
 Croyances
 Émotions
 Catalogue complet de Verbes
-Simulation sociale avancée
 ```
 
 ---
 
-# 22. Phase actuelle
+# 27. Phase actuelle
 
-Le moteur est entré dans **v0.4 — Le monde vivant**.
+Le moteur reste en **v0.4 — Le monde vivant**.
 
-Le premier raccordement d'autonomie est validé.
+Le bloc suivant recommandé doit augmenter la capacité du monde à fonctionner réellement sans le joueur.
 
-La prochaine brique ne doit pas être codée avant d'avoir vérifié que les autorités GDB définissent suffisamment précisément la politique qu'elle doit traduire.
-
-Candidats documentaires prioritaires :
+La prochaine frontière est donc :
 
 ```text
-GDB-004B — Besoins
-GDB-004D — Personnalités
-GDB-004E — Habitudes
-GDB-004F — Ambitions
-GDB-002E — Opportunités
+travail autonome
++
+économie autonome minimale
 ```
+
+avant d'ajouter mécaniquement un troisième besoin physiologique.
+
+Les règles GDB correspondantes doivent être auditées avant toute nouvelle spécification ENGINE.
 
 ---
 
-# 23. Workflow
+# 28. Workflow
 
 ```text
 GDB / ACT
@@ -496,25 +636,29 @@ Tests
 ↓
 Validation
 ↓
-TECH
+Consolidation documentaire au jalon pertinent
+↓
+TECH / AUDIT / roadmap / README concernés
 ```
 
 Une nouvelle règle métier ne doit pas apparaître uniquement dans le code.
 
 ---
 
-# 24. Statut
+# 29. Statut
 
 ```text
 CHRONIQUES-ENGINE
 Version de développement : v0.4
 Build : ✅
-Tests : ✅ 146 / 146
+Tests : ✅ 178 / 178
 Architecture : active
-Autonomie orchestration : validée
+Orchestration autonome : validée
+Décision autonome repos : validée
+Décision autonome alimentation : validée
 Développement : en cours
 ```
 
 Le moteur n'est pas terminé.
 
-Il possède désormais une base déterministe capable d'orchestrer une vie contrôlée et de raccorder les premières Actions d'habitants autonomes au même pipeline d'exécution.
+Il possède désormais une base déterministe capable d'orchestrer une vie contrôlée, de faire agir des habitants sans intervention du joueur, puis de choisir et exécuter deux réponses physiologiques réelles à travers le même pipeline d'Actions.
