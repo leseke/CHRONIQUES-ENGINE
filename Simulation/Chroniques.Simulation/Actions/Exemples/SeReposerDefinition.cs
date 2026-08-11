@@ -3,14 +3,17 @@ using Chroniques.Simulation.Actions;
 namespace Chroniques.Simulation.Actions.Exemples;
 
 /// <summary>
-/// Action Definition de démonstration : « Se reposer » restaure la
-/// Fatigue de son Acteur.
+/// Action Definition actuellement utilisée pour le Verbe canonique
+/// <c>VERB-001 — Se reposer</c>, spécialisé depuis <c>PAT-001 — Repos</c>.
 ///
-/// Ceci n'est jamais un Verbe officiel --- ACT-008-A, section 1, réserve
-/// l'énumération des Verbes concrets à la bibliothèque VERBS, pilotée par
-/// GDB. Ce dossier <c>Exemples</c> ne sert qu'à prouver que l'architecture
-/// d'ENGINE-006 fonctionne réellement de bout en bout, avec un unique
-/// Verbe volontairement minimal.
+/// La classe reste pour l'instant dans le namespace historique
+/// <c>Actions.Exemples</c> parce que le moteur ne possède pas encore de registre
+/// général des Verbes ni de second Verbe réel justifiant une réorganisation.
+/// Ce placement technique ne retire pas le statut canonique du Verbe ACT.
+///
+/// La valeur <see cref="FatigueRestauree"/> reste une valeur de tuning de
+/// l'implémentation courante ; VERB-001 ne la définit pas comme constante
+/// universelle de Game Design.
 /// </summary>
 public static class SeReposerDefinition
 {
