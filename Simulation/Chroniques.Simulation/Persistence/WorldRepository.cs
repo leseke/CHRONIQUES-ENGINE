@@ -6,8 +6,8 @@ using Chroniques.Simulation.Kernel;
 /// <summary>
 /// Sauvegarde et recharge un <see cref="World"/> en JSON.
 ///
-/// Format retenu : JSON. Les Components métier actuellement persistés sont
-/// explicitement projetés dans <see cref="EntitySnapshot"/>.
+/// Les Components métier actuellement persistés sont explicitement projetés
+/// dans <see cref="EntitySnapshot"/>.
 /// </summary>
 public static class WorldRepository
 {
@@ -24,6 +24,8 @@ public static class WorldRepository
                 entity.TryGet<Components.NeedsComponent>(out var needs);
                 entity.TryGet<Components.AgeComponent>(out var age);
                 entity.TryGet<Components.FoodProductComponent>(out var foodProduct);
+                entity.TryGet<Components.ResourceStockComponent>(out var resourceStock);
+                entity.TryGet<Components.ProductionProvenanceComponent>(out var productionProvenance);
 
                 return new EntitySnapshot(
                     entity.Id.Value,
@@ -31,7 +33,9 @@ public static class WorldRepository
                     entity.Lifecycle.CurrentState.Name,
                     needs,
                     age,
-                    foodProduct);
+                    foodProduct,
+                    resourceStock,
+                    productionProvenance);
             })
             .ToList();
 
@@ -71,6 +75,16 @@ public static class WorldRepository
             if (entitySnapshot.FoodProduct is not null)
             {
                 entity.Set(entitySnapshot.FoodProduct);
+            }
+
+            if (entitySnapshot.ResourceStock is not null)
+            {
+                entity.Set(entitySnapshot.ResourceStock);
+            }
+
+            if (entitySnapshot.ProductionProvenance is not null)
+            {
+                entity.Set(entitySnapshot.ProductionProvenance);
             }
 
             world.Reintroduce(entity);
