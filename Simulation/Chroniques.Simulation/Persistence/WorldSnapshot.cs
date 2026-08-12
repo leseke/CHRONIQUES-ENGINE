@@ -23,7 +23,9 @@ public sealed record EntitySnapshot(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ResourceStockComponent? ResourceStock = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    ProductionProvenanceComponent? ProductionProvenance = null);
+    ProductionProvenanceComponent? ProductionProvenance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    HabitComponent? Habits = null);
 
 /// <summary>
 /// Représentation sérialisable d'un <see cref="World"/>.
