@@ -28,6 +28,7 @@ public static class WorldRepository
                 entity.TryGet<Components.ProductionProvenanceComponent>(out var productionProvenance);
                 entity.TryGet<Components.HabitComponent>(out var habits);
                 entity.TryGet<Components.AmbitionComponent>(out var ambitions);
+                entity.TryGet<Components.PersonalityComponent>(out var personality);
 
                 return new EntitySnapshot(
                     entity.Id.Value,
@@ -39,7 +40,8 @@ public static class WorldRepository
                     resourceStock,
                     productionProvenance,
                     habits,
-                    ambitions);
+                    ambitions,
+                    personality);
             })
             .ToList();
 
@@ -99,6 +101,11 @@ public static class WorldRepository
             if (entitySnapshot.Ambitions is not null)
             {
                 entity.Set(entitySnapshot.Ambitions);
+            }
+
+            if (entitySnapshot.Personality is not null)
+            {
+                entity.Set(entitySnapshot.Personality);
             }
 
             world.Reintroduce(entity);
