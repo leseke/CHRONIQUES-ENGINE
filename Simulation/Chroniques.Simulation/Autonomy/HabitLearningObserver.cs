@@ -218,28 +218,34 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
         }
 
         var current = component.Habits[index];
-        var force = current.Force;
-
-        if (action.Outcome?.Forme is OutcomeForme.Reussite or OutcomeForme.ReussitePartielle)
+        var activated = current with
         {
-            force = NormalizeStrength(
-                _strengthPolicy.Reinforce(
-                    current,
-                    actor,
-                    world,
-                    selection.SelectedAt));
+            LastActivatedAt = selection.SelectedAt,
+        };
 
-            if (force < current.Force)
-            {
-                throw new InvalidOperationException(
-                    "Une politique de renforcement d'Habitude ne peut pas diminuer la Force.");
-            }
+        component.Habits[index] = activated;
+
+        if (action.Outcome?.Forme is not (OutcomeForme.Reussite or OutcomeForme.ReussitePartielle))
+        {
+            return;
         }
 
-        component.Habits[index] = current with
+        var force = NormalizeStrength(
+            _strengthPolicy.Reinforce(
+                activated,
+                actor,
+                world,
+                selection.SelectedAt));
+
+        if (force < current.Force)
+        {
+            throw new InvalidOperationException(
+                "Une politique de renforcement d'Habitude ne peut pas diminuer la Force.");
+        }
+
+        component.Habits[index] = activated with
         {
             Force = force,
-            LastActivatedAt = selection.SelectedAt,
         };
     }
 
