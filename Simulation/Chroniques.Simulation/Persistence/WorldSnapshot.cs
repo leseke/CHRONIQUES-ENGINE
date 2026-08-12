@@ -27,7 +27,9 @@ public sealed record EntitySnapshot(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     HabitComponent? Habits = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    AmbitionComponent? Ambitions = null);
+    AmbitionComponent? Ambitions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    PersonalityComponent? Personality = null);
 
 /// <summary>
 /// Représentation sérialisable d'un <see cref="World"/>.
