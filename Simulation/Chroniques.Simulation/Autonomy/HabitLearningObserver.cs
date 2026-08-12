@@ -228,6 +228,12 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
                     actor,
                     world,
                     selection.SelectedAt));
+
+            if (force < current.Force)
+            {
+                throw new InvalidOperationException(
+                    "Une politique de renforcement d'Habitude ne peut pas diminuer la Force.");
+            }
         }
 
         component.Habits[index] = current with
