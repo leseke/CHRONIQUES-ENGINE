@@ -26,6 +26,7 @@ public static class WorldRepository
                 entity.TryGet<Components.FoodProductComponent>(out var foodProduct);
                 entity.TryGet<Components.ResourceStockComponent>(out var resourceStock);
                 entity.TryGet<Components.ProductionProvenanceComponent>(out var productionProvenance);
+                entity.TryGet<Components.HabitComponent>(out var habits);
 
                 return new EntitySnapshot(
                     entity.Id.Value,
@@ -35,7 +36,8 @@ public static class WorldRepository
                     age,
                     foodProduct,
                     resourceStock,
-                    productionProvenance);
+                    productionProvenance,
+                    habits);
             })
             .ToList();
 
@@ -85,6 +87,11 @@ public static class WorldRepository
             if (entitySnapshot.ProductionProvenance is not null)
             {
                 entity.Set(entitySnapshot.ProductionProvenance);
+            }
+
+            if (entitySnapshot.Habits is not null)
+            {
+                entity.Set(entitySnapshot.Habits);
             }
 
             world.Reintroduce(entity);
