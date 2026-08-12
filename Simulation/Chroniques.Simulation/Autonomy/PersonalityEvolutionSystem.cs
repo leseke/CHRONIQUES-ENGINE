@@ -129,15 +129,19 @@ public sealed class PersonalityEvolutionSystem : ISystem
 
             var inflexion = rule.FindInflexion(trait, actor, world, currentTick);
 
-            if (inflexion is not null
-                && !HasAlreadyAppliedCause(component, trait.Name, inflexion.CauseId))
+            if (inflexion is not null)
             {
-                component.Traits[index] = ApplyInflexion(
-                    component,
-                    trait,
-                    inflexion,
-                    currentTick);
-                continue;
+                ValidateInflexion(trait, inflexion);
+
+                if (!HasAlreadyAppliedCause(component, trait.Name, inflexion.CauseId))
+                {
+                    component.Traits[index] = ApplyInflexion(
+                        component,
+                        trait,
+                        inflexion,
+                        currentTick);
+                    continue;
+                }
             }
 
             component.Traits[index] = Stabilize(
@@ -189,8 +193,6 @@ public sealed class PersonalityEvolutionSystem : ISystem
         PersonalityInflexion inflexion,
         Tick currentTick)
     {
-        ValidateInflexion(trait, inflexion);
-
         var newValue = Math.Clamp(trait.Value + inflexion.ValueDelta, 0d, 100d);
         if (newValue == trait.Value)
         {
@@ -261,6 +263,45 @@ public sealed class PersonalityEvolutionSystem : ISystem
 
             ValidateBoundedFinite(trait.Value, "Value", trait.Name);
             ValidateBoundedFinite(trait.ReferenceWeight, "ReferenceWeight", trait.Name);
+        }
+
+        foreach (var trace in component.Inflexions)
+        {
+            if (string.IsNullOrWhiteSpace(trace.TraitName)
+                || string.IsNullOrWhiteSpace(trace.CauseId))
+            {
+                throw new InvalidOperationException(
+                    "Une trace d'Inflexion persistée exige TraitName et CauseId non vides.");
+            }
+
+            if (!double.IsFinite(trace.ValueDelta) || trace.ValueDelta == 0d)
+            {
+                throw new InvalidOperationException(
+                    "Une trace d'Inflexion persistée exige un ValueDelta fini et non nul.");
+            }
+
+            ValidateBoundedFinite(
+                trace.PreviousReferenceWeight,
+                "PreviousReferenceWeight",
+                trace.TraitName);
+            ValidateBoundedFinite(
+                trace.NewReferenceWeight,
+                "NewReferenceWeight",
+                trace.TraitName);
+
+            if (trace.Kind == PersonalityInflexionKind.Light
+                && trace.PreviousReferenceWeight != trace.NewReferenceWeight)
+            {
+                throw new InvalidOperationException(
+                    "Une trace d'Inflexion légère ne peut modifier le Poids de référence.");
+            }
+
+            if (trace.Kind == PersonalityInflexionKind.Deep
+                && trace.PreviousReferenceWeight == trace.NewReferenceWeight)
+            {
+                throw new InvalidOperationException(
+                    "Une trace d'Inflexion profonde doit modifier le Poids de référence.");
+            }
         }
     }
 
