@@ -52,9 +52,17 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
         ArgumentNullException.ThrowIfNull(world);
 
         var candidates = _rules
-            .Select(rule => rule.ObserveFormation(intent, actor, world, currentTick))
-            .Where(candidate => candidate is not null)
-            .Select(candidate => candidate!)
+            .Select(rule => new
+            {
+                Rule = rule,
+                Candidate = rule.ObserveFormation(intent, actor, world, currentTick),
+            })
+            .Where(item => item.Candidate is not null)
+            .Where(item => string.Equals(
+                item.Rule.HabitTypeId,
+                item.Candidate!.HabitTypeId,
+                StringComparison.Ordinal))
+            .Select(item => item.Candidate!)
             .Where(IsValidCandidate)
             .Distinct()
             .ToArray();
@@ -75,9 +83,10 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
         ArgumentNullException.ThrowIfNull(world);
 
         var hasPending = _pendingFormation.Remove(actor.Id, out var candidates);
+        var hasFormationCandidates = hasPending && candidates!.Count > 0;
         var hasSelection = _selectionRegistry.TryTake(actor.Id, out var selection);
 
-        if (!hasPending && !hasSelection)
+        if (!hasFormationCandidates && !hasSelection)
         {
             return;
         }
@@ -88,7 +97,7 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
             actor.Set(component);
         }
 
-        if (hasPending)
+        if (hasFormationCandidates)
         {
             foreach (var candidate in candidates!)
             {
@@ -125,7 +134,14 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
         ArgumentNullException.ThrowIfNull(error);
 
         _pendingFormation.Remove(actor.Id);
-        _selectionRegistry.Clear(actor.Id);
+
+        if (!_selectionRegistry.TryTake(actor.Id, out var selection)
+            || !actor.TryGet<HabitComponent>(out var component))
+        {
+            return;
+        }
+
+        CommitActivationOnly(selection, component);
     }
 
     private void CommitFormation(
@@ -217,6 +233,22 @@ public sealed class HabitLearningObserver : IAutonomousIntentExecutionObserver
         component.Habits[index] = current with
         {
             Force = force,
+            LastActivatedAt = selection.SelectedAt,
+        };
+    }
+
+    private static void CommitActivationOnly(
+        HabitSelection selection,
+        HabitComponent component)
+    {
+        var index = component.Habits.FindIndex(habit => SameIdentity(habit, selection));
+        if (index < 0)
+        {
+            return;
+        }
+
+        component.Habits[index] = component.Habits[index] with
+        {
             LastActivatedAt = selection.SelectedAt,
         };
     }
