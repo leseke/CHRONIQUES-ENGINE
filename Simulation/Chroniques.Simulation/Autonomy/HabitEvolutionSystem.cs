@@ -57,6 +57,12 @@ public sealed class HabitEvolutionSystem : ISystem
                         world,
                         currentTick));
 
+                if (eroded > habit.Force)
+                {
+                    throw new InvalidOperationException(
+                        "Une politique d'érosion d'Habitude ne peut pas augmenter la Force.");
+                }
+
                 if (eroded <= 0)
                 {
                     component.Habits.RemoveAt(index);
