@@ -46,9 +46,9 @@ public static class GenerationContinuityRegistry
     public static void Advance(World world, string id, EntityId previous, EntityId next, Tick tick, Guid evidenceId)
     {
         var item = Get(world, id);
+        if (item.Transitions.Any(x => x.SourceEventId == evidenceId)) return;
         if (item.CurrentMemberId != previous) throw new InvalidOperationException("current member mismatch");
         if (!world.TryGetEntity(next, out _)) throw new InvalidOperationException("next member missing");
-        if (item.Transitions.Any(x => x.SourceEventId == evidenceId)) return;
 
         checked { item.GenerationIndex++; }
         item.CurrentMemberId = next;
@@ -82,6 +82,7 @@ public sealed class GenerationContinuitySynchronizer
         var previous = continuity.CurrentMemberId;
         var evidence = world.Events.LastOrDefault(item =>
             item.OccurredAt == world.CurrentTick
+            && string.Equals(item.Kind, "heritage.transmission", StringComparison.Ordinal)
             && item.Source == previous
             && item.Target == activeMemberId);
 
