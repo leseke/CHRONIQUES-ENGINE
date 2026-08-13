@@ -30,6 +30,7 @@ public static class WorldRepository
                 entity.TryGet<Components.AmbitionComponent>(out var ambitions);
                 entity.TryGet<Components.PersonalityComponent>(out var personality);
                 entity.TryGet<Components.WorldMemoryComponent>(out var worldMemory);
+                entity.TryGet<Components.GenerationContinuityComponent>(out var generationContinuity);
 
                 return new EntitySnapshot(
                     entity.Id.Value,
@@ -43,7 +44,8 @@ public static class WorldRepository
                     habits,
                     ambitions,
                     personality,
-                    worldMemory);
+                    worldMemory,
+                    generationContinuity);
             })
             .ToList();
 
@@ -113,6 +115,11 @@ public static class WorldRepository
             if (entitySnapshot.WorldMemory is not null)
             {
                 entity.Set(entitySnapshot.WorldMemory);
+            }
+
+            if (entitySnapshot.GenerationContinuity is not null)
+            {
+                entity.Set(entitySnapshot.GenerationContinuity);
             }
 
             world.Reintroduce(entity);
