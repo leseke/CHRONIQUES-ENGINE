@@ -1,10 +1,10 @@
 namespace Chroniques.Simulation.Tests;
 
 using Xunit;
-using Chroniques.Simulation.Autonomy;
 using Chroniques.Simulation.Components;
 using Chroniques.Simulation.Kernel;
 using Chroniques.Simulation.Persistence;
+using LineageWorldMemoryGenerationResolver = Chroniques.Simulation.Autonomy.LineageWorldMemoryGenerationResolver;
 
 public sealed class Engine020Tests
 {
