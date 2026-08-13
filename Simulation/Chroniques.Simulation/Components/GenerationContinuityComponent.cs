@@ -62,3 +62,37 @@ public static class GenerationContinuityRegistry
             return value;
         }).Where(value => value is not null && value.ContinuityId == id).Select(value => value!).ToList();
 }
+
+public sealed class GenerationContinuitySynchronizer
+{
+    private readonly string _continuityId;
+
+    public GenerationContinuitySynchronizer(string continuityId)
+    {
+        if (string.IsNullOrWhiteSpace(continuityId)) throw new ArgumentException("continuityId");
+        _continuityId = continuityId;
+    }
+
+    public void Synchronize(World world, EntityId activeMemberId)
+    {
+        var continuity = GenerationContinuityRegistry.Get(world, _continuityId);
+        if (continuity.CurrentMemberId == activeMemberId) return;
+        if (!world.TryGetEntity(activeMemberId, out _)) throw new InvalidOperationException("active member missing");
+
+        var previous = continuity.CurrentMemberId;
+        var evidence = world.Events.LastOrDefault(item =>
+            item.OccurredAt == world.CurrentTick
+            && item.Source == previous
+            && item.Target == activeMemberId);
+
+        if (evidence is null) throw new InvalidOperationException("missing continuity evidence");
+
+        GenerationContinuityRegistry.Advance(
+            world,
+            _continuityId,
+            previous,
+            activeMemberId,
+            evidence.OccurredAt,
+            evidence.Id);
+    }
+}
